@@ -100677,22 +100677,22 @@ window.arangoDocument = Backbone.Collection.extend({
       var result;
       $.ajax("whoAmI", {async:false}).done(
         function(data) {
-        result = data.name;
-      }
+          result = data.user;
+        }
       );
+
       this.activeUser = result;
 
-      if (this.activeUser === 0 || this.activeUser === undefined || this.activeUser === null) {
+      if (this.activeUser === false) {
         this.activeUser = "root";
       }
-
     },
 
     url: '/_api/user/',
 
     model: ArangoQuery,
 
-    activeUser: 0,
+    activeUser: null,
 
     parse: function(response) {
       var self = this, toReturn;
@@ -100853,7 +100853,7 @@ window.StatisticsDescriptionCollection = Backbone.Collection.extend({
 window.ArangoUsers = Backbone.Collection.extend({
   model: window.Users,
 
-  activeUser: "",
+  activeUser: null,
   activeUserSettings: {
     "query" : {},
     "shell" : {},
@@ -100880,8 +100880,22 @@ window.ArangoUsers = Backbone.Collection.extend({
   },
 
   login: function (username, password) {
-    this.activeUser = username;
-    return true;
+    var result = null;
+    $.ajax("login", {
+      async: false,
+      method: "POST",
+      data: JSON.stringify({
+        username: username,
+        password: password
+      }),
+      dataType: "json"
+    }).done(
+      function (data) {
+        result = data.user;
+      }
+    );
+    this.activeUser = result;
+    return this.activeUser;
   },
 
   setSortingDesc: function(yesno) {
@@ -100889,14 +100903,11 @@ window.ArangoUsers = Backbone.Collection.extend({
   },
 
   logout: function () {
-    this.activeUser = undefined;
+    $.ajax("logout", {async:false,method:"POST"});
+    this.activeUser = null;
     this.reset();
-    $.ajax("unauthorized", {async:false}).error(
-      function () {
-        window.App.navigate("");
-        window.location.reload();
-      }
-    );
+    window.App.navigate("");
+    window.location.reload();
   },
 
   setUserSettings: function (identifier, content) {
@@ -100952,7 +100963,7 @@ window.ArangoUsers = Backbone.Collection.extend({
     var result;
     $.ajax("whoAmI", {async:false}).done(
       function(data) {
-        result = data.name;
+        result = data.user;
       }
     );
     this.activeUser = result;
@@ -106312,62 +106323,40 @@ window.ArangoUsers = Backbone.Collection.extend({
     },
 
     events: {
-      "click #submitLogin" : "login",
-      "keydown #loginUsername" : "checkKey",
-      "keydown #loginPassword" : "checkKey"
+      "submit #loginForm" : "login"
     },
 
     template: templateEngine.createTemplate("loginView.ejs"),
 
     render: function() {
-      this.addDummyUser();
-
       $(this.el).html(this.template.render({}));
       $(this.el2).hide();
       $(this.el3).hide();
 
       $('#loginUsername').focus();
 
-      //DEVELOPMENT
-      $('#loginUsername').val('admin');
-      $('#loginPassword').val('admin');
-
       return this;
     },
 
-    addDummyUser: function () {
-      this.collection.add({
-        "userName" : "admin",
-        "sessionId" : "abc123",
-        "password" :"admin",
-        "userId" : 1
-      });
-    },
-
-    checkKey: function (e) {
-      if (e.keyCode === 13) {
-        this.login();
-      }
-    },
-
-    login: function () {
+    login: function (e) {
+      e.preventDefault();
       var username = $('#loginUsername').val();
       var password = $('#loginPassword').val();
 
-      if (username === '' || password === '') {
+      if (!username) {
         //Heiko: Form-Validator - please fill out all req. fields
+        console.log(username, 'empty');
         return;
       }
-      var callback = this.collection.login(username, password);
+      username = this.collection.login(username, password);
 
-      if (callback === true) {
+      if (username) {
         $(this.el2).show();
         $(this.el3).show();
-        window.App.navigate("/", {trigger: true});
+        window.location.reload();
         $('#currentUser').text(username);
         this.collection.loadUserSettings();
       }
-
     }
 
   });
@@ -106985,7 +106974,7 @@ window.ArangoUsers = Backbone.Collection.extend({
       }));
       this.dbSelectionView.render($("#dbSelect"));
       this.notificationView.render($("#notificationBar"));
-      if (this.userCollection.whoAmI() !== null) {
+      if (this.userCollection.whoAmI()) {
         this.userBarView.render();
       }
       this.statisticBarView.render($("#statisticBar"));
@@ -108740,7 +108729,7 @@ window.ArangoUsers = Backbone.Collection.extend({
         name = null,
         active = false,
         currentUser = null;
-      if (username !== null) {
+      if (username) {
         currentUser = this.userCollection.findWhere({user: username});
         currentUser.set({loggedIn : true});
         name = currentUser.get("extra").name;
@@ -109442,7 +109431,7 @@ window.ArangoUsers = Backbone.Collection.extend({
     },
 
     checkUser: function () {
-      if (this.userCollection.models.length === 0) {
+      if (this.userCollection.activeUser === null) {
         this.navigate("login", {trigger: true});
         return false;
       }
@@ -109450,6 +109439,7 @@ window.ArangoUsers = Backbone.Collection.extend({
     },
 
     applicationDetail: function (mount) {
+      if (!this.checkUser()) return;
       this.naviView.selectMenuItem('applications-menu');
 
       if (this.foxxList.length === 0) {
@@ -109466,6 +109456,10 @@ window.ArangoUsers = Backbone.Collection.extend({
     },
 
     login: function () {
+      if (this.userCollection.activeUser !== null) {
+        this.navigate("", {trigger: true});
+        return false;
+      }
       if (!this.loginView) {
         this.loginView = new window.loginView({
           collection: this.userCollection
@@ -109476,6 +109470,7 @@ window.ArangoUsers = Backbone.Collection.extend({
     },
 
     collections: function () {
+      if (!this.checkUser()) return;
       var naviView = this.naviView, self = this;
       if (!this.collectionsView) {
         this.collectionsView = new window.CollectionsView({
@@ -109491,6 +109486,7 @@ window.ArangoUsers = Backbone.Collection.extend({
     },
 
     documents: function (colid, pageid) {
+      if (!this.checkUser()) return;
       if (!this.documentsView) {
         this.documentsView = new window.DocumentsView({
           collection: new window.arangoDocuments(),
@@ -109504,6 +109500,7 @@ window.ArangoUsers = Backbone.Collection.extend({
     },
 
     document: function (colid, docid) {
+      if (!this.checkUser()) return;
       if (!this.documentView) {
         this.documentView = new window.DocumentView({
           collection: this.arangoDocumentStore
@@ -109517,6 +109514,7 @@ window.ArangoUsers = Backbone.Collection.extend({
     },
 
     shell: function () {
+      if (!this.checkUser()) return;
       if (!this.shellView) {
         this.shellView = new window.shellView();
       }
@@ -109525,6 +109523,7 @@ window.ArangoUsers = Backbone.Collection.extend({
     },
 
     query: function () {
+      if (!this.checkUser()) return;
       if (!this.queryView) {
         this.queryView = new window.queryView({
           collection: this.queryCollection
@@ -109545,6 +109544,7 @@ window.ArangoUsers = Backbone.Collection.extend({
     },
 
     api: function () {
+      if (!this.checkUser()) return;
       if (!this.apiView) {
         this.apiView = new window.ApiView();
       }
@@ -109553,103 +109553,110 @@ window.ArangoUsers = Backbone.Collection.extend({
     },
 
     databases: function () {
+      if (!this.checkUser()) return;
       if (arangoHelper.databaseAllowed() === true) {
         if (! this.databaseView) {
           this.databaseView = new window.databaseView({
             users: this.userCollection,
             collection: this.arangoDatabase
           });
-          }
-          this.databaseView.render();
-          this.naviView.selectMenuItem('databases-menu');
         }
-        else {
-          this.navigate("#", {trigger: true});
-          this.naviView.selectMenuItem('dashboard-menu');
-          $('#databaseNavi').css('display', 'none');
-          $('#databaseNaviSelect').css('display', 'none');
-        }
-      },
-
-      dashboard: function () {
+        this.databaseView.render();
+        this.naviView.selectMenuItem('databases-menu');
+      } else {
+        this.navigate("#", {trigger: true});
         this.naviView.selectMenuItem('dashboard-menu');
-        if (this.dashboardView === undefined) {
-          this.dashboardView = new window.DashboardView({
-            dygraphConfig: window.dygraphConfig,
-            database: this.arangoDatabase
-          });
-        }
-        this.dashboardView.render();
-      },
-
-      graphManagement: function () {
-        if (!this.graphManagementView) {
-          this.graphManagementView =
-          new window.GraphManagementView(
-            {
-              collection: new window.GraphCollection(),
-              collectionCollection: this.arangoCollectionsStore
-            }
-          );
-        }
-        this.graphManagementView.render();
-        this.naviView.selectMenuItem('graphviewer-menu');
-      },
-
-      applications: function () {
-        if (this.applicationsView === undefined) {
-          this.applicationsView = new window.ApplicationsView({
-            collection: this.foxxList
-          });
-        }
-        this.applicationsView.reload();
-        this.naviView.selectMenuItem('applications-menu');
-      },
-
-      appDocumentation: function (mount) {
-        var docuView = new window.AppDocumentationView({mount: mount});
-        docuView.render();
-        this.naviView.selectMenuItem('applications-menu');
-      },
-
-      handleSelectDatabase: function () {
-        this.naviView.handleSelectDatabase();
-      },
-
-      handleResize: function () {
-        if (this.dashboardView) {
-          this.dashboardView.resize();
-        }
-        if (this.graphManagementView) {
-          this.graphManagementView.handleResize($("#content").width());
-        }
-        if (this.queryView) {
-          this.queryView.resize();
-        }
-      },
-
-      userManagement: function () {
-        if (!this.userManagementView) {
-          this.userManagementView = new window.userManagementView({
-            collection: this.userCollection
-          });
-        }
-        this.userManagementView.render();
-        this.naviView.selectMenuItem('tools-menu');
-      },
-
-      userProfile: function () {
-        if (!this.userManagementView) {
-          this.userManagementView = new window.userManagementView({
-            collection: this.userCollection
-          });
-        }
-        this.userManagementView.render(true);
-        this.naviView.selectMenuItem('tools-menu');
+        $('#databaseNavi').css('display', 'none');
+        $('#databaseNaviSelect').css('display', 'none');
       }
-    });
+    },
 
-  }());
+    dashboard: function () {
+      if (!this.checkUser()) return;
+      this.naviView.selectMenuItem('dashboard-menu');
+      if (this.dashboardView === undefined) {
+        this.dashboardView = new window.DashboardView({
+          dygraphConfig: window.dygraphConfig,
+          database: this.arangoDatabase
+        });
+      }
+      this.dashboardView.render();
+    },
+
+    graphManagement: function () {
+      if (!this.checkUser()) return;
+      if (!this.graphManagementView) {
+        this.graphManagementView =
+        new window.GraphManagementView(
+          {
+            collection: new window.GraphCollection(),
+            collectionCollection: this.arangoCollectionsStore
+          }
+        );
+      }
+      this.graphManagementView.render();
+      this.naviView.selectMenuItem('graphviewer-menu');
+    },
+
+    applications: function () {
+      if (!this.checkUser()) return;
+      if (this.applicationsView === undefined) {
+        this.applicationsView = new window.ApplicationsView({
+          collection: this.foxxList
+        });
+      }
+      this.applicationsView.reload();
+      this.naviView.selectMenuItem('applications-menu');
+    },
+
+    appDocumentation: function (mount) {
+      if (!this.checkUser()) return;
+      var docuView = new window.AppDocumentationView({mount: mount});
+      docuView.render();
+      this.naviView.selectMenuItem('applications-menu');
+    },
+
+    handleSelectDatabase: function () {
+      if (!this.checkUser()) return;
+      this.naviView.handleSelectDatabase();
+    },
+
+    handleResize: function () {
+      if (this.dashboardView) {
+        this.dashboardView.resize();
+      }
+      if (this.graphManagementView) {
+        this.graphManagementView.handleResize($("#content").width());
+      }
+      if (this.queryView) {
+        this.queryView.resize();
+      }
+    },
+
+    userManagement: function () {
+      if (!this.checkUser()) return;
+      if (!this.userManagementView) {
+        this.userManagementView = new window.userManagementView({
+          collection: this.userCollection
+        });
+      }
+      this.userManagementView.render();
+      this.naviView.selectMenuItem('tools-menu');
+    },
+
+    userProfile: function () {
+      if (!this.checkUser()) return;
+      if (!this.userManagementView) {
+        this.userManagementView = new window.userManagementView({
+          collection: this.userCollection
+        });
+      }
+      this.userManagementView.render(true);
+      this.naviView.selectMenuItem('tools-menu');
+    }
+  });
+
+}());
 
 /*jshint unused: false */
 /*global $, window, _*/

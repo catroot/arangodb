@@ -11362,15 +11362,10 @@ window.arangoDocument = Backbone.Collection.extend({
       var result;
       $.ajax("whoAmI", {async:false}).done(
         function(data) {
-        result = data.name;
-      }
+          result = data.user;
+        }
       );
       this.activeUser = result;
-
-      if (this.activeUser === 0 || this.activeUser === undefined || this.activeUser === null) {
-        this.activeUser = "root";
-      }
-
     },
 
     url: '/_api/user/',
@@ -19425,7 +19420,7 @@ window.ArangoUsers = Backbone.Collection.extend({
         name = null,
         active = false,
         currentUser = null;
-      if (username !== null) {
+      if (username) {
         currentUser = this.userCollection.findWhere({user: username});
         currentUser.set({loggedIn : true});
         name = currentUser.get("extra").name;
