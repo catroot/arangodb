@@ -109354,35 +109354,6 @@ window.ArangoUsers = Backbone.Collection.extend({
       "logs": "logs"
     },
 
-    logs: function () {
-      if (!this.logsView) {
-        var newLogsAllCollection = new window.ArangoLogs(
-          {upto: true, loglevel: 4}
-        ),
-        newLogsDebugCollection = new window.ArangoLogs(
-          {loglevel: 4}
-        ),
-        newLogsInfoCollection = new window.ArangoLogs(
-          {loglevel: 3}
-        ),
-        newLogsWarningCollection = new window.ArangoLogs(
-          {loglevel: 2}
-        ),
-        newLogsErrorCollection = new window.ArangoLogs(
-          {loglevel: 1}
-        );
-        this.logsView = new window.LogsView({
-          logall: newLogsAllCollection,
-          logdebug: newLogsDebugCollection,
-          loginfo: newLogsInfoCollection,
-          logwarning: newLogsWarningCollection,
-          logerror: newLogsErrorCollection
-        });
-      }
-      this.logsView.render();
-      this.naviView.selectMenuItem('tools-menu');
-    },
-
     initialize: function () {
       // This should be the only global object
       window.modalView = new window.ModalView();
@@ -109436,6 +109407,36 @@ window.ArangoUsers = Backbone.Collection.extend({
         return false;
       }
       return true;
+    },
+
+    logs: function () {
+      if (!this.checkUser()) return;
+      if (!this.logsView) {
+        var newLogsAllCollection = new window.ArangoLogs(
+          {upto: true, loglevel: 4}
+        ),
+        newLogsDebugCollection = new window.ArangoLogs(
+          {loglevel: 4}
+        ),
+        newLogsInfoCollection = new window.ArangoLogs(
+          {loglevel: 3}
+        ),
+        newLogsWarningCollection = new window.ArangoLogs(
+          {loglevel: 2}
+        ),
+        newLogsErrorCollection = new window.ArangoLogs(
+          {loglevel: 1}
+        );
+        this.logsView = new window.LogsView({
+          logall: newLogsAllCollection,
+          logdebug: newLogsDebugCollection,
+          loginfo: newLogsInfoCollection,
+          logwarning: newLogsWarningCollection,
+          logerror: newLogsErrorCollection
+        });
+      }
+      this.logsView.render();
+      this.naviView.selectMenuItem('tools-menu');
     },
 
     applicationDetail: function (mount) {
