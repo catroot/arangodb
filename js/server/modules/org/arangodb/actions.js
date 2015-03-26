@@ -135,7 +135,7 @@ function createCallbackActionCallbackString (callback, foxxModule, route) {
     return foxxModule.require(path);
   };
 
-  var content = "(function(__myenv__) {";
+  var content = "(function (__myenv__) {";
 
   for (key in sandbox) {
     if (sandbox.hasOwnProperty(key)) {
@@ -969,7 +969,7 @@ function flattenRouting (routes, path, rexpr, urlParameters, depth, prefix) {
   // .............................................................................
 
   if (routes.hasOwnProperty('routes')) {
-    var sorted = _.clone(routes.routes.sort(function(a,b) {
+    var sorted = _.clone(routes.routes.sort(function (a,b) {
       return b.priority - a.priority;
     }));
 
@@ -1870,7 +1870,7 @@ function resultCursor (req, res, cursor, code, options) {
       count = cursor.json.length;
       rows = cursor.json;
       extra = { };
-      [ "stats", "warnings", "profile" ].forEach(function(d) {
+      [ "stats", "warnings", "profile" ].forEach(function (d) {
         if (cursor.hasOwnProperty(d)) {
           extra[d] = cursor[d];
         }
@@ -2254,8 +2254,8 @@ exports.startup                  = startup;
 exports.buildRouting             = buildRouting;
 exports.buildRoutingTree         = buildRoutingTree;
 exports.flattenRoutingTree       = flattenRoutingTree;
-exports.routingTree              = function() { return RoutingTree; };
-exports.routingList              = function() { return RoutingList; };
+exports.routingTree              = function () { return RoutingTree; };
+exports.routingList              = function () { return RoutingList; };
 
 // public functions
 exports.routeRequest             = routeRequest;

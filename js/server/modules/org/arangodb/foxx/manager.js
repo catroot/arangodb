@@ -425,7 +425,7 @@ function computeRootAppPath(mount) {
 function transformMountToPath(mount) {
   var list = mount.split("/");
   list.push("APP");
-  return fs.join.apply(this, list);
+  return fs.join.apply(fs, list);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -622,7 +622,7 @@ function extractAppToPath(archive, targetPath, noDelete)  {
   // locate the manifest file
   // .............................................................................
 
-  var tree = fs.listTree(tempFile).sort(function(a,b) {
+  var tree = fs.listTree(tempFile).sort(function (a,b) {
     return a.length - b.length;
   });
   var found;
@@ -857,7 +857,7 @@ function rescanFoxx(mount) {
     collections: {
       write: collection.name()
     },
-    action: function() {
+    action: function () {
       var definition = collection.firstExample({mount: mount});
       if (definition !== null) {
         collection.remove(definition._key);
@@ -944,7 +944,7 @@ function _install(appInfo, mount, options, runSetup) {
       collections: {
         write: collection.name()
       },
-      action: function() {
+      action: function () {
         app = _scanFoxx(mount, options);
       }
     });
@@ -968,7 +968,7 @@ function _install(appInfo, mount, options, runSetup) {
           collections: {
             write: collection.name()
           },
-          action: function() {
+          action: function () {
             var definition = collection.firstExample({mount: mount});
             collection.remove(definition._key);
           }
@@ -999,7 +999,7 @@ function install(appInfo, mount, options) {
   options = options || {};
   if (ArangoServerState.isCoordinator() && !options.__clusterDistribution) {
     let name = ArangoServerState.id();
-    let coordinators = ArangoClusterInfo.getCoordinators().filter(function(c) {
+    let coordinators = ArangoClusterInfo.getCoordinators().filter(function (c) {
       return c !== name;
     });
     if (hasToBeDistributed) {
@@ -1077,7 +1077,7 @@ function _uninstall(mount, options) {
         collections: {
           write: collection.name()
         },
-        action: function() {
+        action: function () {
           var definition = collection.firstExample({mount: mount});
           collection.remove(definition._key);
         }
@@ -1106,7 +1106,7 @@ function _uninstall(mount, options) {
   }
   if (options.force && app === undefined) {
     return {
-      simpleJSON: function() {
+      simpleJSON: function () {
         return {
           name: "force uninstalled",
           version: "unknown",
@@ -1173,7 +1173,7 @@ function replace(appInfo, mount, options) {
   let hasToBeDistributed = /^uploads[\/\\]tmp-/.test(appInfo);
   if (ArangoServerState.isCoordinator() && !options.__clusterDistribution) {
     let name = ArangoServerState.id();
-    let coordinators = ArangoClusterInfo.getCoordinators().filter(function(c) {
+    let coordinators = ArangoClusterInfo.getCoordinators().filter(function (c) {
       return c !== name;
     });
     if (hasToBeDistributed) {
@@ -1240,7 +1240,7 @@ function upgrade(appInfo, mount, options) {
   let hasToBeDistributed = /^uploads[\/\\]tmp-/.test(appInfo);
   if (ArangoServerState.isCoordinator() && !options.__clusterDistribution) {
     let name = ArangoServerState.id();
-    let coordinators = ArangoClusterInfo.getCoordinators().filter(function(c) {
+    let coordinators = ArangoClusterInfo.getCoordinators().filter(function (c) {
       return c !== name;
     });
     if (hasToBeDistributed) {

@@ -359,7 +359,7 @@ function findExecutionNodes(plan, nodetype) {
   if (plan.hasOwnProperty("plan")) {
     what = plan.plan;
   }
-  what.nodes.forEach(function(node) {
+  what.nodes.forEach(function (node) {
     if (node.type === nodetype) {
 
       matches.push(node);
@@ -375,8 +375,8 @@ function findExecutionNodes(plan, nodetype) {
 function findReferencedNodes(plan, testNode) {
   var matches = [];
   if (testNode.elements) {
-    testNode.elements.forEach(function(element) {
-      plan.plan.nodes.forEach(function(node) {
+    testNode.elements.forEach(function (element) {
+      plan.plan.nodes.forEach(function (node) {
         if (node.hasOwnProperty("outVariable") && 
             node.outVariable.id ===
             element.inVariable.id) {
@@ -386,7 +386,7 @@ function findReferencedNodes(plan, testNode) {
     });
   }
   else {
-    plan.plan.nodes.forEach(function(node) {
+    plan.plan.nodes.forEach(function (node) {
       if (node.outVariable.id === testNode.inVariable.id) {
         matches.push(node);
       }
@@ -479,7 +479,7 @@ function removeAlwaysOnClusterRules (rules) {
 }
 
 function removeClusterNodes (nodeTypes) {
-  return nodeTypes.filter(function(nodeType) {
+  return nodeTypes.filter(function (nodeType) {
     return ([ "ScatterNode", "GatherNode", "DistributeNode", "RemoteNode" ].indexOf(nodeType) === -1);
   });
 }
