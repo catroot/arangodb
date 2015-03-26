@@ -32,7 +32,10 @@
 var internal = require("internal");
 var arangodb = require("org/arangodb");
 var ShapedJson = internal.ShapedJson;
-var printYaml = function (plan) { require("internal").print(require("js-yaml").safeDump(plan));};
+
+function printYaml(plan) {
+  require("internal").print(require("js-yaml").safeDump(plan));
+}
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                         AQL test helper functions
