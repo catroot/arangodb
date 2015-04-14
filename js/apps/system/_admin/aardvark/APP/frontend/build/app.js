@@ -71568,12 +71568,38 @@ function GharialAdapter(nodes, edges, viewer, config) {
       });
     },
 
-    getNRandom = function(n, callback) {
-      sendQuery(queries.randomVertices, {
-        limit: n
-      }, function(res) {
-        callback(res);
+    getNRandom = function(n, collection) {
+      var data = {
+        query: queries.randomVertices,
+        bindVars: {
+          "@collection" : collection,
+          limit: n
+        }
+      };
+      var result;
+
+      $.ajax({
+        type: "POST",
+        url: api.cursor,
+        data: JSON.stringify(data),
+        contentType: "application/json",
+        dataType: "json",
+        processData: false,
+        async: false,
+        success: function(data) {
+          result = data.result;
+        },
+        error: function(data) {
+          try {
+            console.log(data.statusText);
+            throw "[" + data.errorNum + "] " + data.errorMessage;
+          }
+          catch (e) {
+            throw "Undefined ERROR";
+          }
+        }
       });
+      return result;
     },
 
     parseResultOfTraversal = function (result, callback) {
@@ -71648,7 +71674,7 @@ function GharialAdapter(nodes, edges, viewer, config) {
       + "})";
   queries.childrenCentrality = "RETURN LENGTH(GRAPH_EDGES(@graph, @id, {direction: any}))";
   queries.connectedEdges = "RETURN GRAPH_EDGES(@graph, @id)";
-  queries.randomVertices = "FOR x IN GRAPH_VERTICES(@graph, {}) SORT RAND() LIMIT @limit RETURN x";
+  queries.randomVertices = "FOR x IN @@collection SORT RAND() LIMIT @limit RETURN x";
 
   self.explore = absAdapter.explore;
 
@@ -71657,13 +71683,18 @@ function GharialAdapter(nodes, edges, viewer, config) {
   };
 
   self.loadRandomNode = function(callback) {
-    getNRandom(1, function(list) {
-      if (list.length === 0) {
-        callback({errorCode: 404});
+    var collections = _.shuffle(self.getNodeCollections()), i;
+    for (i = 0; i < collections.length; ++i) {
+      var list = getNRandom(1, collections[i]);
+      
+      if (list.length > 0) {
+        self.loadInitialNode(list[0]._id, callback);
         return;
       }
-      self.loadInitialNode(list[0]._id, callback);
-    });
+    }
+
+    // no vertex found
+    callback({errorCode: 404});
   };
 
   self.loadInitialNode = function(nodeId, callback) {
@@ -71872,20 +71903,27 @@ function GharialAdapter(nodes, edges, viewer, config) {
 
   self.getAttributeExamples = function(callback) {
     if (callback && callback.length >= 1) {
-      getNRandom(10, function(l) {
-        var ret = _.sortBy(
-          _.uniq(
-            _.flatten(
-              _.map(l, function(o) {
-                return _.keys(o);
-              })
-            )
-          ), function(e) {
-            return e.toLowerCase();
-          }
-        );
-        callback(ret);
-      });
+      var ret = [ ];
+      var collections = _.shuffle(self.getNodeCollections()), i;
+      for (i = 0; i < collections.length; ++i) {
+        var l = getNRandom(10, collections[i]);
+      
+        if (l.length > 0) {
+          ret = ret.concat(_.flatten(
+           _.map(l, function(o) {
+             return _.keys(o);
+           })
+          ));
+        }
+      }
+          
+      var ret = _.sortBy(
+        _.uniq(ret), function(e) {
+          return e.toLowerCase();
+        }
+      );
+
+      callback(ret);
     }
   };
 
@@ -77646,8 +77684,8 @@ return returnVal;
   }
 }());
 
-/*jshint strict: false, unused: false */
-/*global $, jqconsole, window, document */
+/*jshint node:false, browser:true, strict: false, unused: false */
+/*global global:true, $, jqconsole */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief ArangoDB web browser shell
@@ -77715,6 +77753,10 @@ Module.prototype.moduleCache["/internal"] = new Module("/internal");
 // --SECTION--                                                  public variables
 // -----------------------------------------------------------------------------
 
+if (typeof global === 'undefined' && typeof window !== 'undefined') {
+  global = window;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 /// @addtogroup ArangoShell
 /// @{
@@ -77724,7 +77766,7 @@ Module.prototype.moduleCache["/internal"] = new Module("/internal");
 /// @brief module
 ////////////////////////////////////////////////////////////////////////////////
 
-var module = Module.prototype.moduleCache["/"] = new Module("/");
+global.module = Module.prototype.moduleCache["/"] = new Module("/");
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @}
@@ -77849,7 +77891,7 @@ Module.prototype.require = function (path) {
 };
 
 function require (path) {
-  return module.require(path);
+  return global.module.require(path);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -78228,7 +78270,7 @@ ArangoConnection.prototype.PATCH = ArangoConnection.prototype.patch;
 // outline-regexp: "/// @brief\\|/// @addtogroup\\|// --SECTION--\\|/// @page\\|/// @}"
 // End:
 
-/*global require, _, Dygraph, window, document */
+/*global _, Dygraph, window, document */
 
 (function () {
   "use strict";
@@ -78521,9 +78563,9 @@ ArangoConnection.prototype.PATCH = ArangoConnection.prototype.patch;
 }());
 
 module.define("underscore", function(exports, module) {
-//     Underscore.js 1.6.0
+//     Underscore.js 1.8.3
 //     http://underscorejs.org
-//     (c) 2009-2014 Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
+//     (c) 2009-2015 Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
 //     Underscore may be freely distributed under the MIT license.
 
 (function() {
@@ -78537,9 +78579,6 @@ module.define("underscore", function(exports, module) {
   // Save the previous value of the `_` variable.
   var previousUnderscore = root._;
 
-  // Establish the object that gets returned to break out of a loop iteration.
-  var breaker = {};
-
   // Save bytes in the minified (but not gzipped) version:
   var ArrayProto = Array.prototype, ObjProto = Object.prototype, FuncProto = Function.prototype;
 
@@ -78547,25 +78586,19 @@ module.define("underscore", function(exports, module) {
   var
     push             = ArrayProto.push,
     slice            = ArrayProto.slice,
-    concat           = ArrayProto.concat,
     toString         = ObjProto.toString,
     hasOwnProperty   = ObjProto.hasOwnProperty;
 
   // All **ECMAScript 5** native function implementations that we hope to use
   // are declared here.
   var
-    nativeForEach      = ArrayProto.forEach,
-    nativeMap          = ArrayProto.map,
-    nativeReduce       = ArrayProto.reduce,
-    nativeReduceRight  = ArrayProto.reduceRight,
-    nativeFilter       = ArrayProto.filter,
-    nativeEvery        = ArrayProto.every,
-    nativeSome         = ArrayProto.some,
-    nativeIndexOf      = ArrayProto.indexOf,
-    nativeLastIndexOf  = ArrayProto.lastIndexOf,
     nativeIsArray      = Array.isArray,
     nativeKeys         = Object.keys,
-    nativeBind         = FuncProto.bind;
+    nativeBind         = FuncProto.bind,
+    nativeCreate       = Object.create;
+
+  // Naked function reference for surrogate-prototype-swapping.
+  var Ctor = function(){};
 
   // Create a safe reference to the Underscore object for use below.
   var _ = function(obj) {
@@ -78576,8 +78609,7 @@ module.define("underscore", function(exports, module) {
 
   // Export the Underscore object for **Node.js**, with
   // backwards-compatibility for the old `require()` API. If we're in
-  // the browser, add `_` as a global object via a string identifier,
-  // for Closure Compiler "advanced" mode.
+  // the browser, add `_` as a global object.
   if (typeof exports !== 'undefined') {
     if (typeof module !== 'undefined' && module.exports) {
       exports = module.exports = _;
@@ -78588,161 +78620,217 @@ module.define("underscore", function(exports, module) {
   }
 
   // Current version.
-  _.VERSION = '1.6.0';
+  _.VERSION = '1.8.3';
+
+  // Internal function that returns an efficient (for current engines) version
+  // of the passed-in callback, to be repeatedly applied in other Underscore
+  // functions.
+  var optimizeCb = function(func, context, argCount) {
+    if (context === void 0) return func;
+    switch (argCount == null ? 3 : argCount) {
+      case 1: return function(value) {
+        return func.call(context, value);
+      };
+      case 2: return function(value, other) {
+        return func.call(context, value, other);
+      };
+      case 3: return function(value, index, collection) {
+        return func.call(context, value, index, collection);
+      };
+      case 4: return function(accumulator, value, index, collection) {
+        return func.call(context, accumulator, value, index, collection);
+      };
+    }
+    return function() {
+      return func.apply(context, arguments);
+    };
+  };
+
+  // A mostly-internal function to generate callbacks that can be applied
+  // to each element in a collection, returning the desired result — either
+  // identity, an arbitrary callback, a property matcher, or a property accessor.
+  var cb = function(value, context, argCount) {
+    if (value == null) return _.identity;
+    if (_.isFunction(value)) return optimizeCb(value, context, argCount);
+    if (_.isObject(value)) return _.matcher(value);
+    return _.property(value);
+  };
+  _.iteratee = function(value, context) {
+    return cb(value, context, Infinity);
+  };
+
+  // An internal function for creating assigner functions.
+  var createAssigner = function(keysFunc, undefinedOnly) {
+    return function(obj) {
+      var length = arguments.length;
+      if (length < 2 || obj == null) return obj;
+      for (var index = 1; index < length; index++) {
+        var source = arguments[index],
+            keys = keysFunc(source),
+            l = keys.length;
+        for (var i = 0; i < l; i++) {
+          var key = keys[i];
+          if (!undefinedOnly || obj[key] === void 0) obj[key] = source[key];
+        }
+      }
+      return obj;
+    };
+  };
+
+  // An internal function for creating a new object that inherits from another.
+  var baseCreate = function(prototype) {
+    if (!_.isObject(prototype)) return {};
+    if (nativeCreate) return nativeCreate(prototype);
+    Ctor.prototype = prototype;
+    var result = new Ctor;
+    Ctor.prototype = null;
+    return result;
+  };
+
+  var property = function(key) {
+    return function(obj) {
+      return obj == null ? void 0 : obj[key];
+    };
+  };
+
+  // Helper for collection methods to determine whether a collection
+  // should be iterated as an array or as an object
+  // Related: http://people.mozilla.org/~jorendorff/es6-draft.html#sec-tolength
+  // Avoids a very nasty iOS 8 JIT bug on ARM-64. #2094
+  var MAX_ARRAY_INDEX = Math.pow(2, 53) - 1;
+  var getLength = property('length');
+  var isArrayLike = function(collection) {
+    var length = getLength(collection);
+    return typeof length == 'number' && length >= 0 && length <= MAX_ARRAY_INDEX;
+  };
 
   // Collection Functions
   // --------------------
 
   // The cornerstone, an `each` implementation, aka `forEach`.
-  // Handles objects with the built-in `forEach`, arrays, and raw objects.
-  // Delegates to **ECMAScript 5**'s native `forEach` if available.
-  var each = _.each = _.forEach = function(obj, iterator, context) {
-    if (obj == null) return obj;
-    if (nativeForEach && obj.forEach === nativeForEach) {
-      obj.forEach(iterator, context);
-    } else if (obj.length === +obj.length) {
-      for (var i = 0, length = obj.length; i < length; i++) {
-        if (iterator.call(context, obj[i], i, obj) === breaker) return;
+  // Handles raw objects in addition to array-likes. Treats all
+  // sparse array-likes as if they were dense.
+  _.each = _.forEach = function(obj, iteratee, context) {
+    iteratee = optimizeCb(iteratee, context);
+    var i, length;
+    if (isArrayLike(obj)) {
+      for (i = 0, length = obj.length; i < length; i++) {
+        iteratee(obj[i], i, obj);
       }
     } else {
       var keys = _.keys(obj);
-      for (var i = 0, length = keys.length; i < length; i++) {
-        if (iterator.call(context, obj[keys[i]], keys[i], obj) === breaker) return;
+      for (i = 0, length = keys.length; i < length; i++) {
+        iteratee(obj[keys[i]], keys[i], obj);
       }
     }
     return obj;
   };
 
-  // Return the results of applying the iterator to each element.
-  // Delegates to **ECMAScript 5**'s native `map` if available.
-  _.map = _.collect = function(obj, iterator, context) {
-    var results = [];
-    if (obj == null) return results;
-    if (nativeMap && obj.map === nativeMap) return obj.map(iterator, context);
-    each(obj, function(value, index, list) {
-      results.push(iterator.call(context, value, index, list));
-    });
+  // Return the results of applying the iteratee to each element.
+  _.map = _.collect = function(obj, iteratee, context) {
+    iteratee = cb(iteratee, context);
+    var keys = !isArrayLike(obj) && _.keys(obj),
+        length = (keys || obj).length,
+        results = Array(length);
+    for (var index = 0; index < length; index++) {
+      var currentKey = keys ? keys[index] : index;
+      results[index] = iteratee(obj[currentKey], currentKey, obj);
+    }
     return results;
   };
 
-  var reduceError = 'Reduce of empty array with no initial value';
+  // Create a reducing function iterating left or right.
+  function createReduce(dir) {
+    // Optimized iterator function as using arguments.length
+    // in the main function will deoptimize the, see #1991.
+    function iterator(obj, iteratee, memo, keys, index, length) {
+      for (; index >= 0 && index < length; index += dir) {
+        var currentKey = keys ? keys[index] : index;
+        memo = iteratee(memo, obj[currentKey], currentKey, obj);
+      }
+      return memo;
+    }
+
+    return function(obj, iteratee, memo, context) {
+      iteratee = optimizeCb(iteratee, context, 4);
+      var keys = !isArrayLike(obj) && _.keys(obj),
+          length = (keys || obj).length,
+          index = dir > 0 ? 0 : length - 1;
+      // Determine the initial value if none is provided.
+      if (arguments.length < 3) {
+        memo = obj[keys ? keys[index] : index];
+        index += dir;
+      }
+      return iterator(obj, iteratee, memo, keys, index, length);
+    };
+  }
 
   // **Reduce** builds up a single result from a list of values, aka `inject`,
-  // or `foldl`. Delegates to **ECMAScript 5**'s native `reduce` if available.
-  _.reduce = _.foldl = _.inject = function(obj, iterator, memo, context) {
-    var initial = arguments.length > 2;
-    if (obj == null) obj = [];
-    if (nativeReduce && obj.reduce === nativeReduce) {
-      if (context) iterator = _.bind(iterator, context);
-      return initial ? obj.reduce(iterator, memo) : obj.reduce(iterator);
-    }
-    each(obj, function(value, index, list) {
-      if (!initial) {
-        memo = value;
-        initial = true;
-      } else {
-        memo = iterator.call(context, memo, value, index, list);
-      }
-    });
-    if (!initial) throw new TypeError(reduceError);
-    return memo;
-  };
+  // or `foldl`.
+  _.reduce = _.foldl = _.inject = createReduce(1);
 
   // The right-associative version of reduce, also known as `foldr`.
-  // Delegates to **ECMAScript 5**'s native `reduceRight` if available.
-  _.reduceRight = _.foldr = function(obj, iterator, memo, context) {
-    var initial = arguments.length > 2;
-    if (obj == null) obj = [];
-    if (nativeReduceRight && obj.reduceRight === nativeReduceRight) {
-      if (context) iterator = _.bind(iterator, context);
-      return initial ? obj.reduceRight(iterator, memo) : obj.reduceRight(iterator);
-    }
-    var length = obj.length;
-    if (length !== +length) {
-      var keys = _.keys(obj);
-      length = keys.length;
-    }
-    each(obj, function(value, index, list) {
-      index = keys ? keys[--length] : --length;
-      if (!initial) {
-        memo = obj[index];
-        initial = true;
-      } else {
-        memo = iterator.call(context, memo, obj[index], index, list);
-      }
-    });
-    if (!initial) throw new TypeError(reduceError);
-    return memo;
-  };
+  _.reduceRight = _.foldr = createReduce(-1);
 
   // Return the first value which passes a truth test. Aliased as `detect`.
   _.find = _.detect = function(obj, predicate, context) {
-    var result;
-    any(obj, function(value, index, list) {
-      if (predicate.call(context, value, index, list)) {
-        result = value;
-        return true;
-      }
-    });
-    return result;
+    var key;
+    if (isArrayLike(obj)) {
+      key = _.findIndex(obj, predicate, context);
+    } else {
+      key = _.findKey(obj, predicate, context);
+    }
+    if (key !== void 0 && key !== -1) return obj[key];
   };
 
   // Return all the elements that pass a truth test.
-  // Delegates to **ECMAScript 5**'s native `filter` if available.
   // Aliased as `select`.
   _.filter = _.select = function(obj, predicate, context) {
     var results = [];
-    if (obj == null) return results;
-    if (nativeFilter && obj.filter === nativeFilter) return obj.filter(predicate, context);
-    each(obj, function(value, index, list) {
-      if (predicate.call(context, value, index, list)) results.push(value);
+    predicate = cb(predicate, context);
+    _.each(obj, function(value, index, list) {
+      if (predicate(value, index, list)) results.push(value);
     });
     return results;
   };
 
   // Return all the elements for which a truth test fails.
   _.reject = function(obj, predicate, context) {
-    return _.filter(obj, function(value, index, list) {
-      return !predicate.call(context, value, index, list);
-    }, context);
+    return _.filter(obj, _.negate(cb(predicate)), context);
   };
 
   // Determine whether all of the elements match a truth test.
-  // Delegates to **ECMAScript 5**'s native `every` if available.
   // Aliased as `all`.
   _.every = _.all = function(obj, predicate, context) {
-    predicate || (predicate = _.identity);
-    var result = true;
-    if (obj == null) return result;
-    if (nativeEvery && obj.every === nativeEvery) return obj.every(predicate, context);
-    each(obj, function(value, index, list) {
-      if (!(result = result && predicate.call(context, value, index, list))) return breaker;
-    });
-    return !!result;
+    predicate = cb(predicate, context);
+    var keys = !isArrayLike(obj) && _.keys(obj),
+        length = (keys || obj).length;
+    for (var index = 0; index < length; index++) {
+      var currentKey = keys ? keys[index] : index;
+      if (!predicate(obj[currentKey], currentKey, obj)) return false;
+    }
+    return true;
   };
 
   // Determine if at least one element in the object matches a truth test.
-  // Delegates to **ECMAScript 5**'s native `some` if available.
   // Aliased as `any`.
-  var any = _.some = _.any = function(obj, predicate, context) {
-    predicate || (predicate = _.identity);
-    var result = false;
-    if (obj == null) return result;
-    if (nativeSome && obj.some === nativeSome) return obj.some(predicate, context);
-    each(obj, function(value, index, list) {
-      if (result || (result = predicate.call(context, value, index, list))) return breaker;
-    });
-    return !!result;
+  _.some = _.any = function(obj, predicate, context) {
+    predicate = cb(predicate, context);
+    var keys = !isArrayLike(obj) && _.keys(obj),
+        length = (keys || obj).length;
+    for (var index = 0; index < length; index++) {
+      var currentKey = keys ? keys[index] : index;
+      if (predicate(obj[currentKey], currentKey, obj)) return true;
+    }
+    return false;
   };
 
-  // Determine if the array or object contains a given value (using `===`).
-  // Aliased as `include`.
-  _.contains = _.include = function(obj, target) {
-    if (obj == null) return false;
-    if (nativeIndexOf && obj.indexOf === nativeIndexOf) return obj.indexOf(target) != -1;
-    return any(obj, function(value) {
-      return value === target;
-    });
+  // Determine if the array or object contains a given item (using `===`).
+  // Aliased as `includes` and `include`.
+  _.contains = _.includes = _.include = function(obj, item, fromIndex, guard) {
+    if (!isArrayLike(obj)) obj = _.values(obj);
+    if (typeof fromIndex != 'number' || guard) fromIndex = 0;
+    return _.indexOf(obj, item, fromIndex) >= 0;
   };
 
   // Invoke a method (with arguments) on every item in a collection.
@@ -78750,7 +78838,8 @@ module.define("underscore", function(exports, module) {
     var args = slice.call(arguments, 2);
     var isFunc = _.isFunction(method);
     return _.map(obj, function(value) {
-      return (isFunc ? method : value[method]).apply(value, args);
+      var func = isFunc ? method : value[method];
+      return func == null ? func : func.apply(value, args);
     });
   };
 
@@ -78762,60 +78851,76 @@ module.define("underscore", function(exports, module) {
   // Convenience version of a common use case of `filter`: selecting only objects
   // containing specific `key:value` pairs.
   _.where = function(obj, attrs) {
-    return _.filter(obj, _.matches(attrs));
+    return _.filter(obj, _.matcher(attrs));
   };
 
   // Convenience version of a common use case of `find`: getting the first object
   // containing specific `key:value` pairs.
   _.findWhere = function(obj, attrs) {
-    return _.find(obj, _.matches(attrs));
+    return _.find(obj, _.matcher(attrs));
   };
 
-  // Return the maximum element or (element-based computation).
-  // Can't optimize arrays of integers longer than 65,535 elements.
-  // See [WebKit Bug 80797](https://bugs.webkit.org/show_bug.cgi?id=80797)
-  _.max = function(obj, iterator, context) {
-    if (!iterator && _.isArray(obj) && obj[0] === +obj[0] && obj.length < 65535) {
-      return Math.max.apply(Math, obj);
-    }
-    var result = -Infinity, lastComputed = -Infinity;
-    each(obj, function(value, index, list) {
-      var computed = iterator ? iterator.call(context, value, index, list) : value;
-      if (computed > lastComputed) {
-        result = value;
-        lastComputed = computed;
+  // Return the maximum element (or element-based computation).
+  _.max = function(obj, iteratee, context) {
+    var result = -Infinity, lastComputed = -Infinity,
+        value, computed;
+    if (iteratee == null && obj != null) {
+      obj = isArrayLike(obj) ? obj : _.values(obj);
+      for (var i = 0, length = obj.length; i < length; i++) {
+        value = obj[i];
+        if (value > result) {
+          result = value;
+        }
       }
-    });
+    } else {
+      iteratee = cb(iteratee, context);
+      _.each(obj, function(value, index, list) {
+        computed = iteratee(value, index, list);
+        if (computed > lastComputed || computed === -Infinity && result === -Infinity) {
+          result = value;
+          lastComputed = computed;
+        }
+      });
+    }
     return result;
   };
 
   // Return the minimum element (or element-based computation).
-  _.min = function(obj, iterator, context) {
-    if (!iterator && _.isArray(obj) && obj[0] === +obj[0] && obj.length < 65535) {
-      return Math.min.apply(Math, obj);
-    }
-    var result = Infinity, lastComputed = Infinity;
-    each(obj, function(value, index, list) {
-      var computed = iterator ? iterator.call(context, value, index, list) : value;
-      if (computed < lastComputed) {
-        result = value;
-        lastComputed = computed;
+  _.min = function(obj, iteratee, context) {
+    var result = Infinity, lastComputed = Infinity,
+        value, computed;
+    if (iteratee == null && obj != null) {
+      obj = isArrayLike(obj) ? obj : _.values(obj);
+      for (var i = 0, length = obj.length; i < length; i++) {
+        value = obj[i];
+        if (value < result) {
+          result = value;
+        }
       }
-    });
+    } else {
+      iteratee = cb(iteratee, context);
+      _.each(obj, function(value, index, list) {
+        computed = iteratee(value, index, list);
+        if (computed < lastComputed || computed === Infinity && result === Infinity) {
+          result = value;
+          lastComputed = computed;
+        }
+      });
+    }
     return result;
   };
 
-  // Shuffle an array, using the modern version of the
+  // Shuffle a collection, using the modern version of the
   // [Fisher-Yates shuffle](http://en.wikipedia.org/wiki/Fisher–Yates_shuffle).
   _.shuffle = function(obj) {
-    var rand;
-    var index = 0;
-    var shuffled = [];
-    each(obj, function(value) {
-      rand = _.random(index++);
-      shuffled[index - 1] = shuffled[rand];
-      shuffled[rand] = value;
-    });
+    var set = isArrayLike(obj) ? obj : _.values(obj);
+    var length = set.length;
+    var shuffled = Array(length);
+    for (var index = 0, rand; index < length; index++) {
+      rand = _.random(0, index);
+      if (rand !== index) shuffled[index] = shuffled[rand];
+      shuffled[rand] = set[index];
+    }
     return shuffled;
   };
 
@@ -78824,27 +78929,20 @@ module.define("underscore", function(exports, module) {
   // The internal `guard` argument allows it to work with `map`.
   _.sample = function(obj, n, guard) {
     if (n == null || guard) {
-      if (obj.length !== +obj.length) obj = _.values(obj);
+      if (!isArrayLike(obj)) obj = _.values(obj);
       return obj[_.random(obj.length - 1)];
     }
     return _.shuffle(obj).slice(0, Math.max(0, n));
   };
 
-  // An internal function to generate lookup iterators.
-  var lookupIterator = function(value) {
-    if (value == null) return _.identity;
-    if (_.isFunction(value)) return value;
-    return _.property(value);
-  };
-
-  // Sort the object's values by a criterion produced by an iterator.
-  _.sortBy = function(obj, iterator, context) {
-    iterator = lookupIterator(iterator);
+  // Sort the object's values by a criterion produced by an iteratee.
+  _.sortBy = function(obj, iteratee, context) {
+    iteratee = cb(iteratee, context);
     return _.pluck(_.map(obj, function(value, index, list) {
       return {
         value: value,
         index: index,
-        criteria: iterator.call(context, value, index, list)
+        criteria: iteratee(value, index, list)
       };
     }).sort(function(left, right) {
       var a = left.criteria;
@@ -78859,12 +78957,12 @@ module.define("underscore", function(exports, module) {
 
   // An internal function used for aggregate "group by" operations.
   var group = function(behavior) {
-    return function(obj, iterator, context) {
+    return function(obj, iteratee, context) {
       var result = {};
-      iterator = lookupIterator(iterator);
-      each(obj, function(value, index) {
-        var key = iterator.call(context, value, index, obj);
-        behavior(result, key, value);
+      iteratee = cb(iteratee, context);
+      _.each(obj, function(value, index) {
+        var key = iteratee(value, index, obj);
+        behavior(result, value, key);
       });
       return result;
     };
@@ -78872,48 +78970,46 @@ module.define("underscore", function(exports, module) {
 
   // Groups the object's values by a criterion. Pass either a string attribute
   // to group by, or a function that returns the criterion.
-  _.groupBy = group(function(result, key, value) {
-    _.has(result, key) ? result[key].push(value) : result[key] = [value];
+  _.groupBy = group(function(result, value, key) {
+    if (_.has(result, key)) result[key].push(value); else result[key] = [value];
   });
 
   // Indexes the object's values by a criterion, similar to `groupBy`, but for
   // when you know that your index values will be unique.
-  _.indexBy = group(function(result, key, value) {
+  _.indexBy = group(function(result, value, key) {
     result[key] = value;
   });
 
   // Counts instances of an object that group by a certain criterion. Pass
   // either a string attribute to count by, or a function that returns the
   // criterion.
-  _.countBy = group(function(result, key) {
-    _.has(result, key) ? result[key]++ : result[key] = 1;
+  _.countBy = group(function(result, value, key) {
+    if (_.has(result, key)) result[key]++; else result[key] = 1;
   });
-
-  // Use a comparator function to figure out the smallest index at which
-  // an object should be inserted so as to maintain order. Uses binary search.
-  _.sortedIndex = function(array, obj, iterator, context) {
-    iterator = lookupIterator(iterator);
-    var value = iterator.call(context, obj);
-    var low = 0, high = array.length;
-    while (low < high) {
-      var mid = (low + high) >>> 1;
-      iterator.call(context, array[mid]) < value ? low = mid + 1 : high = mid;
-    }
-    return low;
-  };
 
   // Safely create a real, live array from anything iterable.
   _.toArray = function(obj) {
     if (!obj) return [];
     if (_.isArray(obj)) return slice.call(obj);
-    if (obj.length === +obj.length) return _.map(obj, _.identity);
+    if (isArrayLike(obj)) return _.map(obj, _.identity);
     return _.values(obj);
   };
 
   // Return the number of elements in an object.
   _.size = function(obj) {
     if (obj == null) return 0;
-    return (obj.length === +obj.length) ? obj.length : _.keys(obj).length;
+    return isArrayLike(obj) ? obj.length : _.keys(obj).length;
+  };
+
+  // Split a collection into two arrays: one whose elements all satisfy the given
+  // predicate, and one whose elements all do not satisfy the predicate.
+  _.partition = function(obj, predicate, context) {
+    predicate = cb(predicate, context);
+    var pass = [], fail = [];
+    _.each(obj, function(value, key, obj) {
+      (predicate(value, key, obj) ? pass : fail).push(value);
+    });
+    return [pass, fail];
   };
 
   // Array Functions
@@ -78924,33 +79020,30 @@ module.define("underscore", function(exports, module) {
   // allows it to work with `_.map`.
   _.first = _.head = _.take = function(array, n, guard) {
     if (array == null) return void 0;
-    if ((n == null) || guard) return array[0];
-    if (n < 0) return [];
-    return slice.call(array, 0, n);
+    if (n == null || guard) return array[0];
+    return _.initial(array, array.length - n);
   };
 
   // Returns everything but the last entry of the array. Especially useful on
   // the arguments object. Passing **n** will return all the values in
-  // the array, excluding the last N. The **guard** check allows it to work with
-  // `_.map`.
+  // the array, excluding the last N.
   _.initial = function(array, n, guard) {
-    return slice.call(array, 0, array.length - ((n == null) || guard ? 1 : n));
+    return slice.call(array, 0, Math.max(0, array.length - (n == null || guard ? 1 : n)));
   };
 
   // Get the last element of an array. Passing **n** will return the last N
-  // values in the array. The **guard** check allows it to work with `_.map`.
+  // values in the array.
   _.last = function(array, n, guard) {
     if (array == null) return void 0;
-    if ((n == null) || guard) return array[array.length - 1];
-    return slice.call(array, Math.max(array.length - n, 0));
+    if (n == null || guard) return array[array.length - 1];
+    return _.rest(array, Math.max(0, array.length - n));
   };
 
   // Returns everything but the first entry of the array. Aliased as `tail` and `drop`.
   // Especially useful on the arguments object. Passing an **n** will return
-  // the rest N values in the array. The **guard**
-  // check allows it to work with `_.map`.
+  // the rest N values in the array.
   _.rest = _.tail = _.drop = function(array, n, guard) {
-    return slice.call(array, (n == null) || guard ? 1 : n);
+    return slice.call(array, n == null || guard ? 1 : n);
   };
 
   // Trim out all falsy values from an array.
@@ -78959,23 +79052,28 @@ module.define("underscore", function(exports, module) {
   };
 
   // Internal implementation of a recursive `flatten` function.
-  var flatten = function(input, shallow, output) {
-    if (shallow && _.every(input, _.isArray)) {
-      return concat.apply(output, input);
-    }
-    each(input, function(value) {
-      if (_.isArray(value) || _.isArguments(value)) {
-        shallow ? push.apply(output, value) : flatten(value, shallow, output);
-      } else {
-        output.push(value);
+  var flatten = function(input, shallow, strict, startIndex) {
+    var output = [], idx = 0;
+    for (var i = startIndex || 0, length = getLength(input); i < length; i++) {
+      var value = input[i];
+      if (isArrayLike(value) && (_.isArray(value) || _.isArguments(value))) {
+        //flatten current level of array or arguments object
+        if (!shallow) value = flatten(value, shallow, strict);
+        var j = 0, len = value.length;
+        output.length += len;
+        while (j < len) {
+          output[idx++] = value[j++];
+        }
+      } else if (!strict) {
+        output[idx++] = value;
       }
-    });
+    }
     return output;
   };
 
   // Flatten out an array, either recursively (by default), or just one level.
   _.flatten = function(array, shallow) {
-    return flatten(array, shallow, []);
+    return flatten(array, shallow, false);
   };
 
   // Return a version of the array that does not contain the specified value(s).
@@ -78983,79 +79081,91 @@ module.define("underscore", function(exports, module) {
     return _.difference(array, slice.call(arguments, 1));
   };
 
-  // Split an array into two arrays: one whose elements all satisfy the given
-  // predicate, and one whose elements all do not satisfy the predicate.
-  _.partition = function(array, predicate) {
-    var pass = [], fail = [];
-    each(array, function(elem) {
-      (predicate(elem) ? pass : fail).push(elem);
-    });
-    return [pass, fail];
-  };
-
   // Produce a duplicate-free version of the array. If the array has already
   // been sorted, you have the option of using a faster algorithm.
   // Aliased as `unique`.
-  _.uniq = _.unique = function(array, isSorted, iterator, context) {
-    if (_.isFunction(isSorted)) {
-      context = iterator;
-      iterator = isSorted;
+  _.uniq = _.unique = function(array, isSorted, iteratee, context) {
+    if (!_.isBoolean(isSorted)) {
+      context = iteratee;
+      iteratee = isSorted;
       isSorted = false;
     }
-    var initial = iterator ? _.map(array, iterator, context) : array;
-    var results = [];
+    if (iteratee != null) iteratee = cb(iteratee, context);
+    var result = [];
     var seen = [];
-    each(initial, function(value, index) {
-      if (isSorted ? (!index || seen[seen.length - 1] !== value) : !_.contains(seen, value)) {
-        seen.push(value);
-        results.push(array[index]);
+    for (var i = 0, length = getLength(array); i < length; i++) {
+      var value = array[i],
+          computed = iteratee ? iteratee(value, i, array) : value;
+      if (isSorted) {
+        if (!i || seen !== computed) result.push(value);
+        seen = computed;
+      } else if (iteratee) {
+        if (!_.contains(seen, computed)) {
+          seen.push(computed);
+          result.push(value);
+        }
+      } else if (!_.contains(result, value)) {
+        result.push(value);
       }
-    });
-    return results;
+    }
+    return result;
   };
 
   // Produce an array that contains the union: each distinct element from all of
   // the passed-in arrays.
   _.union = function() {
-    return _.uniq(_.flatten(arguments, true));
+    return _.uniq(flatten(arguments, true, true));
   };
 
   // Produce an array that contains every item shared between all the
   // passed-in arrays.
   _.intersection = function(array) {
-    var rest = slice.call(arguments, 1);
-    return _.filter(_.uniq(array), function(item) {
-      return _.every(rest, function(other) {
-        return _.contains(other, item);
-      });
-    });
+    var result = [];
+    var argsLength = arguments.length;
+    for (var i = 0, length = getLength(array); i < length; i++) {
+      var item = array[i];
+      if (_.contains(result, item)) continue;
+      for (var j = 1; j < argsLength; j++) {
+        if (!_.contains(arguments[j], item)) break;
+      }
+      if (j === argsLength) result.push(item);
+    }
+    return result;
   };
 
   // Take the difference between one array and a number of other arrays.
   // Only the elements present in just the first array will remain.
   _.difference = function(array) {
-    var rest = concat.apply(ArrayProto, slice.call(arguments, 1));
-    return _.filter(array, function(value){ return !_.contains(rest, value); });
+    var rest = flatten(arguments, true, true, 1);
+    return _.filter(array, function(value){
+      return !_.contains(rest, value);
+    });
   };
 
   // Zip together multiple lists into a single array -- elements that share
   // an index go together.
   _.zip = function() {
-    var length = _.max(_.pluck(arguments, 'length').concat(0));
-    var results = new Array(length);
-    for (var i = 0; i < length; i++) {
-      results[i] = _.pluck(arguments, '' + i);
+    return _.unzip(arguments);
+  };
+
+  // Complement of _.zip. Unzip accepts an array of arrays and groups
+  // each array's elements on shared indices
+  _.unzip = function(array) {
+    var length = array && _.max(array, getLength).length || 0;
+    var result = Array(length);
+
+    for (var index = 0; index < length; index++) {
+      result[index] = _.pluck(array, index);
     }
-    return results;
+    return result;
   };
 
   // Converts lists into objects. Pass either a single array of `[key, value]`
   // pairs, or two parallel arrays of the same length -- one of keys, and one of
   // the corresponding values.
   _.object = function(list, values) {
-    if (list == null) return {};
     var result = {};
-    for (var i = 0, length = list.length; i < length; i++) {
+    for (var i = 0, length = getLength(list); i < length; i++) {
       if (values) {
         result[list[i]] = values[i];
       } else {
@@ -79065,57 +79175,83 @@ module.define("underscore", function(exports, module) {
     return result;
   };
 
-  // If the browser doesn't supply us with indexOf (I'm looking at you, **MSIE**),
-  // we need this function. Return the position of the first occurrence of an
-  // item in an array, or -1 if the item is not included in the array.
-  // Delegates to **ECMAScript 5**'s native `indexOf` if available.
-  // If the array is large and already in sort order, pass `true`
-  // for **isSorted** to use binary search.
-  _.indexOf = function(array, item, isSorted) {
-    if (array == null) return -1;
-    var i = 0, length = array.length;
-    if (isSorted) {
-      if (typeof isSorted == 'number') {
-        i = (isSorted < 0 ? Math.max(0, length + isSorted) : isSorted);
-      } else {
-        i = _.sortedIndex(array, item);
-        return array[i] === item ? i : -1;
+  // Generator function to create the findIndex and findLastIndex functions
+  function createPredicateIndexFinder(dir) {
+    return function(array, predicate, context) {
+      predicate = cb(predicate, context);
+      var length = getLength(array);
+      var index = dir > 0 ? 0 : length - 1;
+      for (; index >= 0 && index < length; index += dir) {
+        if (predicate(array[index], index, array)) return index;
       }
+      return -1;
+    };
+  }
+
+  // Returns the first index on an array-like that passes a predicate test
+  _.findIndex = createPredicateIndexFinder(1);
+  _.findLastIndex = createPredicateIndexFinder(-1);
+
+  // Use a comparator function to figure out the smallest index at which
+  // an object should be inserted so as to maintain order. Uses binary search.
+  _.sortedIndex = function(array, obj, iteratee, context) {
+    iteratee = cb(iteratee, context, 1);
+    var value = iteratee(obj);
+    var low = 0, high = getLength(array);
+    while (low < high) {
+      var mid = Math.floor((low + high) / 2);
+      if (iteratee(array[mid]) < value) low = mid + 1; else high = mid;
     }
-    if (nativeIndexOf && array.indexOf === nativeIndexOf) return array.indexOf(item, isSorted);
-    for (; i < length; i++) if (array[i] === item) return i;
-    return -1;
+    return low;
   };
 
-  // Delegates to **ECMAScript 5**'s native `lastIndexOf` if available.
-  _.lastIndexOf = function(array, item, from) {
-    if (array == null) return -1;
-    var hasIndex = from != null;
-    if (nativeLastIndexOf && array.lastIndexOf === nativeLastIndexOf) {
-      return hasIndex ? array.lastIndexOf(item, from) : array.lastIndexOf(item);
-    }
-    var i = (hasIndex ? from : array.length);
-    while (i--) if (array[i] === item) return i;
-    return -1;
-  };
+  // Generator function to create the indexOf and lastIndexOf functions
+  function createIndexFinder(dir, predicateFind, sortedIndex) {
+    return function(array, item, idx) {
+      var i = 0, length = getLength(array);
+      if (typeof idx == 'number') {
+        if (dir > 0) {
+            i = idx >= 0 ? idx : Math.max(idx + length, i);
+        } else {
+            length = idx >= 0 ? Math.min(idx + 1, length) : idx + length + 1;
+        }
+      } else if (sortedIndex && idx && length) {
+        idx = sortedIndex(array, item);
+        return array[idx] === item ? idx : -1;
+      }
+      if (item !== item) {
+        idx = predicateFind(slice.call(array, i, length), _.isNaN);
+        return idx >= 0 ? idx + i : -1;
+      }
+      for (idx = dir > 0 ? i : length - 1; idx >= 0 && idx < length; idx += dir) {
+        if (array[idx] === item) return idx;
+      }
+      return -1;
+    };
+  }
+
+  // Return the position of the first occurrence of an item in an array,
+  // or -1 if the item is not included in the array.
+  // If the array is large and already in sort order, pass `true`
+  // for **isSorted** to use binary search.
+  _.indexOf = createIndexFinder(1, _.findIndex, _.sortedIndex);
+  _.lastIndexOf = createIndexFinder(-1, _.findLastIndex);
 
   // Generate an integer Array containing an arithmetic progression. A port of
   // the native Python `range()` function. See
   // [the Python documentation](http://docs.python.org/library/functions.html#range).
   _.range = function(start, stop, step) {
-    if (arguments.length <= 1) {
+    if (stop == null) {
       stop = start || 0;
       start = 0;
     }
-    step = arguments[2] || 1;
+    step = step || 1;
 
     var length = Math.max(Math.ceil((stop - start) / step), 0);
-    var idx = 0;
-    var range = new Array(length);
+    var range = Array(length);
 
-    while(idx < length) {
-      range[idx++] = start;
-      start += step;
+    for (var idx = 0; idx < length; idx++, start += step) {
+      range[idx] = start;
     }
 
     return range;
@@ -79124,26 +79260,27 @@ module.define("underscore", function(exports, module) {
   // Function (ahem) Functions
   // ------------------
 
-  // Reusable constructor function for prototype setting.
-  var ctor = function(){};
+  // Determines whether to execute a function as a constructor
+  // or a normal function with the provided arguments
+  var executeBound = function(sourceFunc, boundFunc, context, callingContext, args) {
+    if (!(callingContext instanceof boundFunc)) return sourceFunc.apply(context, args);
+    var self = baseCreate(sourceFunc.prototype);
+    var result = sourceFunc.apply(self, args);
+    if (_.isObject(result)) return result;
+    return self;
+  };
 
   // Create a function bound to a given object (assigning `this`, and arguments,
   // optionally). Delegates to **ECMAScript 5**'s native `Function.bind` if
   // available.
   _.bind = function(func, context) {
-    var args, bound;
     if (nativeBind && func.bind === nativeBind) return nativeBind.apply(func, slice.call(arguments, 1));
-    if (!_.isFunction(func)) throw new TypeError;
-    args = slice.call(arguments, 2);
-    return bound = function() {
-      if (!(this instanceof bound)) return func.apply(context, args.concat(slice.call(arguments)));
-      ctor.prototype = func.prototype;
-      var self = new ctor;
-      ctor.prototype = null;
-      var result = func.apply(self, args.concat(slice.call(arguments)));
-      if (Object(result) === result) return result;
-      return self;
+    if (!_.isFunction(func)) throw new TypeError('Bind must be called on a function');
+    var args = slice.call(arguments, 2);
+    var bound = function() {
+      return executeBound(func, bound, context, this, args.concat(slice.call(arguments)));
     };
+    return bound;
   };
 
   // Partially apply a function by creating a version that has had some of its
@@ -79151,49 +79288,55 @@ module.define("underscore", function(exports, module) {
   // as a placeholder, allowing any combination of arguments to be pre-filled.
   _.partial = function(func) {
     var boundArgs = slice.call(arguments, 1);
-    return function() {
-      var position = 0;
-      var args = boundArgs.slice();
-      for (var i = 0, length = args.length; i < length; i++) {
-        if (args[i] === _) args[i] = arguments[position++];
+    var bound = function() {
+      var position = 0, length = boundArgs.length;
+      var args = Array(length);
+      for (var i = 0; i < length; i++) {
+        args[i] = boundArgs[i] === _ ? arguments[position++] : boundArgs[i];
       }
       while (position < arguments.length) args.push(arguments[position++]);
-      return func.apply(this, args);
+      return executeBound(func, bound, this, this, args);
     };
+    return bound;
   };
 
   // Bind a number of an object's methods to that object. Remaining arguments
   // are the method names to be bound. Useful for ensuring that all callbacks
   // defined on an object belong to it.
   _.bindAll = function(obj) {
-    var funcs = slice.call(arguments, 1);
-    if (funcs.length === 0) throw new Error('bindAll must be passed function names');
-    each(funcs, function(f) { obj[f] = _.bind(obj[f], obj); });
+    var i, length = arguments.length, key;
+    if (length <= 1) throw new Error('bindAll must be passed function names');
+    for (i = 1; i < length; i++) {
+      key = arguments[i];
+      obj[key] = _.bind(obj[key], obj);
+    }
     return obj;
   };
 
   // Memoize an expensive function by storing its results.
   _.memoize = function(func, hasher) {
-    var memo = {};
-    hasher || (hasher = _.identity);
-    return function() {
-      var key = hasher.apply(this, arguments);
-      return _.has(memo, key) ? memo[key] : (memo[key] = func.apply(this, arguments));
+    var memoize = function(key) {
+      var cache = memoize.cache;
+      var address = '' + (hasher ? hasher.apply(this, arguments) : key);
+      if (!_.has(cache, address)) cache[address] = func.apply(this, arguments);
+      return cache[address];
     };
+    memoize.cache = {};
+    return memoize;
   };
 
   // Delays a function for the given number of milliseconds, and then calls
   // it with the arguments supplied.
   _.delay = function(func, wait) {
     var args = slice.call(arguments, 2);
-    return setTimeout(function(){ return func.apply(null, args); }, wait);
+    return setTimeout(function(){
+      return func.apply(null, args);
+    }, wait);
   };
 
   // Defers a function, scheduling it to run after the current call stack has
   // cleared.
-  _.defer = function(func) {
-    return _.delay.apply(_, [func, 1].concat(slice.call(arguments, 1)));
-  };
+  _.defer = _.partial(_.delay, _, 1);
 
   // Returns a function, that, when invoked, will only be triggered at most once
   // during a given window of time. Normally, the throttled function will run
@@ -79204,12 +79347,12 @@ module.define("underscore", function(exports, module) {
     var context, args, result;
     var timeout = null;
     var previous = 0;
-    options || (options = {});
+    if (!options) options = {};
     var later = function() {
       previous = options.leading === false ? 0 : _.now();
       timeout = null;
       result = func.apply(context, args);
-      context = args = null;
+      if (!timeout) context = args = null;
     };
     return function() {
       var now = _.now();
@@ -79217,12 +79360,14 @@ module.define("underscore", function(exports, module) {
       var remaining = wait - (now - previous);
       context = this;
       args = arguments;
-      if (remaining <= 0) {
-        clearTimeout(timeout);
-        timeout = null;
+      if (remaining <= 0 || remaining > wait) {
+        if (timeout) {
+          clearTimeout(timeout);
+          timeout = null;
+        }
         previous = now;
         result = func.apply(context, args);
-        context = args = null;
+        if (!timeout) context = args = null;
       } else if (!timeout && options.trailing !== false) {
         timeout = setTimeout(later, remaining);
       }
@@ -79239,13 +79384,14 @@ module.define("underscore", function(exports, module) {
 
     var later = function() {
       var last = _.now() - timestamp;
-      if (last < wait) {
+
+      if (last < wait && last >= 0) {
         timeout = setTimeout(later, wait - last);
       } else {
         timeout = null;
         if (!immediate) {
           result = func.apply(context, args);
-          context = args = null;
+          if (!timeout) context = args = null;
         }
       }
     };
@@ -79255,28 +79401,13 @@ module.define("underscore", function(exports, module) {
       args = arguments;
       timestamp = _.now();
       var callNow = immediate && !timeout;
-      if (!timeout) {
-        timeout = setTimeout(later, wait);
-      }
+      if (!timeout) timeout = setTimeout(later, wait);
       if (callNow) {
         result = func.apply(context, args);
         context = args = null;
       }
 
       return result;
-    };
-  };
-
-  // Returns a function that will be executed at most one time, no matter how
-  // often you call it. Useful for lazy initialization.
-  _.once = function(func) {
-    var ran = false, memo;
-    return function() {
-      if (ran) return memo;
-      ran = true;
-      memo = func.apply(this, arguments);
-      func = null;
-      return memo;
     };
   };
 
@@ -79287,20 +79418,27 @@ module.define("underscore", function(exports, module) {
     return _.partial(wrapper, func);
   };
 
-  // Returns a function that is the composition of a list of functions, each
-  // consuming the return value of the function that follows.
-  _.compose = function() {
-    var funcs = arguments;
+  // Returns a negated version of the passed-in predicate.
+  _.negate = function(predicate) {
     return function() {
-      var args = arguments;
-      for (var i = funcs.length - 1; i >= 0; i--) {
-        args = [funcs[i].apply(this, args)];
-      }
-      return args[0];
+      return !predicate.apply(this, arguments);
     };
   };
 
-  // Returns a function that will only be executed after being called N times.
+  // Returns a function that is the composition of a list of functions, each
+  // consuming the return value of the function that follows.
+  _.compose = function() {
+    var args = arguments;
+    var start = args.length - 1;
+    return function() {
+      var i = start;
+      var result = args[start].apply(this, arguments);
+      while (i--) result = args[i].call(this, result);
+      return result;
+    };
+  };
+
+  // Returns a function that will only be executed on and after the Nth call.
   _.after = function(times, func) {
     return function() {
       if (--times < 1) {
@@ -79309,16 +79447,66 @@ module.define("underscore", function(exports, module) {
     };
   };
 
+  // Returns a function that will only be executed up to (but not including) the Nth call.
+  _.before = function(times, func) {
+    var memo;
+    return function() {
+      if (--times > 0) {
+        memo = func.apply(this, arguments);
+      }
+      if (times <= 1) func = null;
+      return memo;
+    };
+  };
+
+  // Returns a function that will be executed at most one time, no matter how
+  // often you call it. Useful for lazy initialization.
+  _.once = _.partial(_.before, 2);
+
   // Object Functions
   // ----------------
 
-  // Retrieve the names of an object's properties.
+  // Keys in IE < 9 that won't be iterated by `for key in ...` and thus missed.
+  var hasEnumBug = !{toString: null}.propertyIsEnumerable('toString');
+  var nonEnumerableProps = ['valueOf', 'isPrototypeOf', 'toString',
+                      'propertyIsEnumerable', 'hasOwnProperty', 'toLocaleString'];
+
+  function collectNonEnumProps(obj, keys) {
+    var nonEnumIdx = nonEnumerableProps.length;
+    var constructor = obj.constructor;
+    var proto = (_.isFunction(constructor) && constructor.prototype) || ObjProto;
+
+    // Constructor is a special case.
+    var prop = 'constructor';
+    if (_.has(obj, prop) && !_.contains(keys, prop)) keys.push(prop);
+
+    while (nonEnumIdx--) {
+      prop = nonEnumerableProps[nonEnumIdx];
+      if (prop in obj && obj[prop] !== proto[prop] && !_.contains(keys, prop)) {
+        keys.push(prop);
+      }
+    }
+  }
+
+  // Retrieve the names of an object's own properties.
   // Delegates to **ECMAScript 5**'s native `Object.keys`
   _.keys = function(obj) {
     if (!_.isObject(obj)) return [];
     if (nativeKeys) return nativeKeys(obj);
     var keys = [];
     for (var key in obj) if (_.has(obj, key)) keys.push(key);
+    // Ahem, IE < 9.
+    if (hasEnumBug) collectNonEnumProps(obj, keys);
+    return keys;
+  };
+
+  // Retrieve all the property names of an object.
+  _.allKeys = function(obj) {
+    if (!_.isObject(obj)) return [];
+    var keys = [];
+    for (var key in obj) keys.push(key);
+    // Ahem, IE < 9.
+    if (hasEnumBug) collectNonEnumProps(obj, keys);
     return keys;
   };
 
@@ -79326,18 +79514,33 @@ module.define("underscore", function(exports, module) {
   _.values = function(obj) {
     var keys = _.keys(obj);
     var length = keys.length;
-    var values = new Array(length);
+    var values = Array(length);
     for (var i = 0; i < length; i++) {
       values[i] = obj[keys[i]];
     }
     return values;
   };
 
+  // Returns the results of applying the iteratee to each element of the object
+  // In contrast to _.map it returns an object
+  _.mapObject = function(obj, iteratee, context) {
+    iteratee = cb(iteratee, context);
+    var keys =  _.keys(obj),
+          length = keys.length,
+          results = {},
+          currentKey;
+      for (var index = 0; index < length; index++) {
+        currentKey = keys[index];
+        results[currentKey] = iteratee(obj[currentKey], currentKey, obj);
+      }
+      return results;
+  };
+
   // Convert an object into a list of `[key, value]` pairs.
   _.pairs = function(obj) {
     var keys = _.keys(obj);
     var length = keys.length;
-    var pairs = new Array(length);
+    var pairs = Array(length);
     for (var i = 0; i < length; i++) {
       pairs[i] = [keys[i], obj[keys[i]]];
     }
@@ -79365,47 +79568,65 @@ module.define("underscore", function(exports, module) {
   };
 
   // Extend a given object with all the properties in passed-in object(s).
-  _.extend = function(obj) {
-    each(slice.call(arguments, 1), function(source) {
-      if (source) {
-        for (var prop in source) {
-          obj[prop] = source[prop];
-        }
-      }
-    });
-    return obj;
+  _.extend = createAssigner(_.allKeys);
+
+  // Assigns a given object with all the own properties in the passed-in object(s)
+  // (https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object/assign)
+  _.extendOwn = _.assign = createAssigner(_.keys);
+
+  // Returns the first key on an object that passes a predicate test
+  _.findKey = function(obj, predicate, context) {
+    predicate = cb(predicate, context);
+    var keys = _.keys(obj), key;
+    for (var i = 0, length = keys.length; i < length; i++) {
+      key = keys[i];
+      if (predicate(obj[key], key, obj)) return key;
+    }
   };
 
   // Return a copy of the object only containing the whitelisted properties.
-  _.pick = function(obj) {
-    var copy = {};
-    var keys = concat.apply(ArrayProto, slice.call(arguments, 1));
-    each(keys, function(key) {
-      if (key in obj) copy[key] = obj[key];
-    });
-    return copy;
+  _.pick = function(object, oiteratee, context) {
+    var result = {}, obj = object, iteratee, keys;
+    if (obj == null) return result;
+    if (_.isFunction(oiteratee)) {
+      keys = _.allKeys(obj);
+      iteratee = optimizeCb(oiteratee, context);
+    } else {
+      keys = flatten(arguments, false, false, 1);
+      iteratee = function(value, key, obj) { return key in obj; };
+      obj = Object(obj);
+    }
+    for (var i = 0, length = keys.length; i < length; i++) {
+      var key = keys[i];
+      var value = obj[key];
+      if (iteratee(value, key, obj)) result[key] = value;
+    }
+    return result;
   };
 
    // Return a copy of the object without the blacklisted properties.
-  _.omit = function(obj) {
-    var copy = {};
-    var keys = concat.apply(ArrayProto, slice.call(arguments, 1));
-    for (var key in obj) {
-      if (!_.contains(keys, key)) copy[key] = obj[key];
+  _.omit = function(obj, iteratee, context) {
+    if (_.isFunction(iteratee)) {
+      iteratee = _.negate(iteratee);
+    } else {
+      var keys = _.map(flatten(arguments, false, false, 1), String);
+      iteratee = function(value, key) {
+        return !_.contains(keys, key);
+      };
     }
-    return copy;
+    return _.pick(obj, iteratee, context);
   };
 
   // Fill in a given object with default properties.
-  _.defaults = function(obj) {
-    each(slice.call(arguments, 1), function(source) {
-      if (source) {
-        for (var prop in source) {
-          if (obj[prop] === void 0) obj[prop] = source[prop];
-        }
-      }
-    });
-    return obj;
+  _.defaults = createAssigner(_.allKeys, true);
+
+  // Creates an object that inherits from the given prototype object.
+  // If additional properties are provided then they will be added to the
+  // created object.
+  _.create = function(prototype, props) {
+    var result = baseCreate(prototype);
+    if (props) _.extendOwn(result, props);
+    return result;
   };
 
   // Create a (shallow-cloned) duplicate of an object.
@@ -79422,11 +79643,24 @@ module.define("underscore", function(exports, module) {
     return obj;
   };
 
+  // Returns whether an object has a given set of `key:value` pairs.
+  _.isMatch = function(object, attrs) {
+    var keys = _.keys(attrs), length = keys.length;
+    if (object == null) return !length;
+    var obj = Object(object);
+    for (var i = 0; i < length; i++) {
+      var key = keys[i];
+      if (attrs[key] !== obj[key] || !(key in obj)) return false;
+    }
+    return true;
+  };
+
+
   // Internal recursive comparison function for `isEqual`.
   var eq = function(a, b, aStack, bStack) {
     // Identical objects are equal. `0 === -0`, but they aren't identical.
     // See the [Harmony `egal` proposal](http://wiki.ecmascript.org/doku.php?id=harmony:egal).
-    if (a === b) return a !== 0 || 1 / a == 1 / b;
+    if (a === b) return a !== 0 || 1 / a === 1 / b;
     // A strict comparison is necessary because `null == undefined`.
     if (a == null || b == null) return a === b;
     // Unwrap any wrapped objects.
@@ -79434,98 +79668,98 @@ module.define("underscore", function(exports, module) {
     if (b instanceof _) b = b._wrapped;
     // Compare `[[Class]]` names.
     var className = toString.call(a);
-    if (className != toString.call(b)) return false;
+    if (className !== toString.call(b)) return false;
     switch (className) {
-      // Strings, numbers, dates, and booleans are compared by value.
+      // Strings, numbers, regular expressions, dates, and booleans are compared by value.
+      case '[object RegExp]':
+      // RegExps are coerced to strings for comparison (Note: '' + /a/i === '/a/i')
       case '[object String]':
         // Primitives and their corresponding object wrappers are equivalent; thus, `"5"` is
         // equivalent to `new String("5")`.
-        return a == String(b);
+        return '' + a === '' + b;
       case '[object Number]':
-        // `NaN`s are equivalent, but non-reflexive. An `egal` comparison is performed for
-        // other numeric values.
-        return a != +a ? b != +b : (a == 0 ? 1 / a == 1 / b : a == +b);
+        // `NaN`s are equivalent, but non-reflexive.
+        // Object(NaN) is equivalent to NaN
+        if (+a !== +a) return +b !== +b;
+        // An `egal` comparison is performed for other numeric values.
+        return +a === 0 ? 1 / +a === 1 / b : +a === +b;
       case '[object Date]':
       case '[object Boolean]':
         // Coerce dates and booleans to numeric primitive values. Dates are compared by their
         // millisecond representations. Note that invalid dates with millisecond representations
         // of `NaN` are not equivalent.
-        return +a == +b;
-      // RegExps are compared by their source patterns and flags.
-      case '[object RegExp]':
-        return a.source == b.source &&
-               a.global == b.global &&
-               a.multiline == b.multiline &&
-               a.ignoreCase == b.ignoreCase;
+        return +a === +b;
     }
-    if (typeof a != 'object' || typeof b != 'object') return false;
+
+    var areArrays = className === '[object Array]';
+    if (!areArrays) {
+      if (typeof a != 'object' || typeof b != 'object') return false;
+
+      // Objects with different constructors are not equivalent, but `Object`s or `Array`s
+      // from different frames are.
+      var aCtor = a.constructor, bCtor = b.constructor;
+      if (aCtor !== bCtor && !(_.isFunction(aCtor) && aCtor instanceof aCtor &&
+                               _.isFunction(bCtor) && bCtor instanceof bCtor)
+                          && ('constructor' in a && 'constructor' in b)) {
+        return false;
+      }
+    }
     // Assume equality for cyclic structures. The algorithm for detecting cyclic
     // structures is adapted from ES 5.1 section 15.12.3, abstract operation `JO`.
+
+    // Initializing stack of traversed objects.
+    // It's done here since we only need them for objects and arrays comparison.
+    aStack = aStack || [];
+    bStack = bStack || [];
     var length = aStack.length;
     while (length--) {
       // Linear search. Performance is inversely proportional to the number of
       // unique nested structures.
-      if (aStack[length] == a) return bStack[length] == b;
+      if (aStack[length] === a) return bStack[length] === b;
     }
-    // Objects with different constructors are not equivalent, but `Object`s
-    // from different frames are.
-    var aCtor = a.constructor, bCtor = b.constructor;
-    if (aCtor !== bCtor && !(_.isFunction(aCtor) && (aCtor instanceof aCtor) &&
-                             _.isFunction(bCtor) && (bCtor instanceof bCtor))
-                        && ('constructor' in a && 'constructor' in b)) {
-      return false;
-    }
+
     // Add the first object to the stack of traversed objects.
     aStack.push(a);
     bStack.push(b);
-    var size = 0, result = true;
+
     // Recursively compare objects and arrays.
-    if (className == '[object Array]') {
+    if (areArrays) {
       // Compare array lengths to determine if a deep comparison is necessary.
-      size = a.length;
-      result = size == b.length;
-      if (result) {
-        // Deep compare the contents, ignoring non-numeric properties.
-        while (size--) {
-          if (!(result = eq(a[size], b[size], aStack, bStack))) break;
-        }
+      length = a.length;
+      if (length !== b.length) return false;
+      // Deep compare the contents, ignoring non-numeric properties.
+      while (length--) {
+        if (!eq(a[length], b[length], aStack, bStack)) return false;
       }
     } else {
       // Deep compare objects.
-      for (var key in a) {
-        if (_.has(a, key)) {
-          // Count the expected number of properties.
-          size++;
-          // Deep compare each member.
-          if (!(result = _.has(b, key) && eq(a[key], b[key], aStack, bStack))) break;
-        }
-      }
-      // Ensure that both objects contain the same number of properties.
-      if (result) {
-        for (key in b) {
-          if (_.has(b, key) && !(size--)) break;
-        }
-        result = !size;
+      var keys = _.keys(a), key;
+      length = keys.length;
+      // Ensure that both objects contain the same number of properties before comparing deep equality.
+      if (_.keys(b).length !== length) return false;
+      while (length--) {
+        // Deep compare each member
+        key = keys[length];
+        if (!(_.has(b, key) && eq(a[key], b[key], aStack, bStack))) return false;
       }
     }
     // Remove the first object from the stack of traversed objects.
     aStack.pop();
     bStack.pop();
-    return result;
+    return true;
   };
 
   // Perform a deep comparison to check if two objects are equal.
   _.isEqual = function(a, b) {
-    return eq(a, b, [], []);
+    return eq(a, b);
   };
 
   // Is a given array, string, or object empty?
   // An "empty" object has no enumerable own-properties.
   _.isEmpty = function(obj) {
     if (obj == null) return true;
-    if (_.isArray(obj) || _.isString(obj)) return obj.length === 0;
-    for (var key in obj) if (_.has(obj, key)) return false;
-    return true;
+    if (isArrayLike(obj) && (_.isArray(obj) || _.isString(obj) || _.isArguments(obj))) return obj.length === 0;
+    return _.keys(obj).length === 0;
   };
 
   // Is a given value a DOM element?
@@ -79536,33 +79770,35 @@ module.define("underscore", function(exports, module) {
   // Is a given value an array?
   // Delegates to ECMA5's native Array.isArray
   _.isArray = nativeIsArray || function(obj) {
-    return toString.call(obj) == '[object Array]';
+    return toString.call(obj) === '[object Array]';
   };
 
   // Is a given variable an object?
   _.isObject = function(obj) {
-    return obj === Object(obj);
+    var type = typeof obj;
+    return type === 'function' || type === 'object' && !!obj;
   };
 
-  // Add some isType methods: isArguments, isFunction, isString, isNumber, isDate, isRegExp.
-  each(['Arguments', 'Function', 'String', 'Number', 'Date', 'RegExp'], function(name) {
+  // Add some isType methods: isArguments, isFunction, isString, isNumber, isDate, isRegExp, isError.
+  _.each(['Arguments', 'Function', 'String', 'Number', 'Date', 'RegExp', 'Error'], function(name) {
     _['is' + name] = function(obj) {
-      return toString.call(obj) == '[object ' + name + ']';
+      return toString.call(obj) === '[object ' + name + ']';
     };
   });
 
-  // Define a fallback version of the method in browsers (ahem, IE), where
+  // Define a fallback version of the method in browsers (ahem, IE < 9), where
   // there isn't any inspectable "Arguments" type.
   if (!_.isArguments(arguments)) {
     _.isArguments = function(obj) {
-      return !!(obj && _.has(obj, 'callee'));
+      return _.has(obj, 'callee');
     };
   }
 
-  // Optimize `isFunction` if appropriate.
-  if (typeof (/./) !== 'function') {
+  // Optimize `isFunction` if appropriate. Work around some typeof bugs in old v8,
+  // IE 11 (#1621), and in Safari 8 (#1929).
+  if (typeof /./ != 'function' && typeof Int8Array != 'object') {
     _.isFunction = function(obj) {
-      return typeof obj === 'function';
+      return typeof obj == 'function' || false;
     };
   }
 
@@ -79573,12 +79809,12 @@ module.define("underscore", function(exports, module) {
 
   // Is the given value `NaN`? (NaN is the only number which does not equal itself).
   _.isNaN = function(obj) {
-    return _.isNumber(obj) && obj != +obj;
+    return _.isNumber(obj) && obj !== +obj;
   };
 
   // Is a given value a boolean?
   _.isBoolean = function(obj) {
-    return obj === true || obj === false || toString.call(obj) == '[object Boolean]';
+    return obj === true || obj === false || toString.call(obj) === '[object Boolean]';
   };
 
   // Is a given value equal to null?
@@ -79594,7 +79830,7 @@ module.define("underscore", function(exports, module) {
   // Shortcut function for checking if an object has a given property directly
   // on itself (in other words, not on a prototype).
   _.has = function(obj, key) {
-    return hasOwnProperty.call(obj, key);
+    return obj != null && hasOwnProperty.call(obj, key);
   };
 
   // Utility Functions
@@ -79607,39 +79843,43 @@ module.define("underscore", function(exports, module) {
     return this;
   };
 
-  // Keep the identity function around for default iterators.
+  // Keep the identity function around for default iteratees.
   _.identity = function(value) {
     return value;
   };
 
+  // Predicate-generating functions. Often useful outside of Underscore.
   _.constant = function(value) {
-    return function () {
+    return function() {
       return value;
     };
   };
 
-  _.property = function(key) {
-    return function(obj) {
+  _.noop = function(){};
+
+  _.property = property;
+
+  // Generates a function for a given object that returns a given property.
+  _.propertyOf = function(obj) {
+    return obj == null ? function(){} : function(key) {
       return obj[key];
     };
   };
 
-  // Returns a predicate for checking whether an object has a given set of `key:value` pairs.
-  _.matches = function(attrs) {
+  // Returns a predicate for checking whether an object has a given set of
+  // `key:value` pairs.
+  _.matcher = _.matches = function(attrs) {
+    attrs = _.extendOwn({}, attrs);
     return function(obj) {
-      if (obj === attrs) return true; //avoid comparing an object to itself.
-      for (var key in attrs) {
-        if (attrs[key] !== obj[key])
-          return false;
-      }
-      return true;
-    }
+      return _.isMatch(obj, attrs);
+    };
   };
 
   // Run a function **n** times.
-  _.times = function(n, iterator, context) {
+  _.times = function(n, iteratee, context) {
     var accum = Array(Math.max(0, n));
-    for (var i = 0; i < n; i++) accum[i] = iterator.call(context, i);
+    iteratee = optimizeCb(iteratee, context, 1);
+    for (var i = 0; i < n; i++) accum[i] = iteratee(i);
     return accum;
   };
 
@@ -79653,54 +79893,46 @@ module.define("underscore", function(exports, module) {
   };
 
   // A (possibly faster) way to get the current timestamp as an integer.
-  _.now = Date.now || function() { return new Date().getTime(); };
-
-  // List of HTML entities for escaping.
-  var entityMap = {
-    escape: {
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#x27;'
-    }
+  _.now = Date.now || function() {
+    return new Date().getTime();
   };
-  entityMap.unescape = _.invert(entityMap.escape);
 
-  // Regexes containing the keys and values listed immediately above.
-  var entityRegexes = {
-    escape:   new RegExp('[' + _.keys(entityMap.escape).join('') + ']', 'g'),
-    unescape: new RegExp('(' + _.keys(entityMap.unescape).join('|') + ')', 'g')
+   // List of HTML entities for escaping.
+  var escapeMap = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#x27;',
+    '`': '&#x60;'
   };
+  var unescapeMap = _.invert(escapeMap);
 
   // Functions for escaping and unescaping strings to/from HTML interpolation.
-  _.each(['escape', 'unescape'], function(method) {
-    _[method] = function(string) {
-      if (string == null) return '';
-      return ('' + string).replace(entityRegexes[method], function(match) {
-        return entityMap[method][match];
-      });
+  var createEscaper = function(map) {
+    var escaper = function(match) {
+      return map[match];
     };
-  });
+    // Regexes for identifying a key that needs to be escaped
+    var source = '(?:' + _.keys(map).join('|') + ')';
+    var testRegexp = RegExp(source);
+    var replaceRegexp = RegExp(source, 'g');
+    return function(string) {
+      string = string == null ? '' : '' + string;
+      return testRegexp.test(string) ? string.replace(replaceRegexp, escaper) : string;
+    };
+  };
+  _.escape = createEscaper(escapeMap);
+  _.unescape = createEscaper(unescapeMap);
 
   // If the value of the named `property` is a function then invoke it with the
   // `object` as context; otherwise, return it.
-  _.result = function(object, property) {
-    if (object == null) return void 0;
-    var value = object[property];
+  _.result = function(object, property, fallback) {
+    var value = object == null ? void 0 : object[property];
+    if (value === void 0) {
+      value = fallback;
+    }
     return _.isFunction(value) ? value.call(object) : value;
-  };
-
-  // Add your own custom functions to the Underscore object.
-  _.mixin = function(obj) {
-    each(_.functions(obj), function(name) {
-      var func = _[name] = obj[name];
-      _.prototype[name] = function() {
-        var args = [this._wrapped];
-        push.apply(args, arguments);
-        return result.call(this, func.apply(_, args));
-      };
-    });
   };
 
   // Generate a unique integer id (unique within the entire client session).
@@ -79731,22 +79963,26 @@ module.define("underscore", function(exports, module) {
     '\\':     '\\',
     '\r':     'r',
     '\n':     'n',
-    '\t':     't',
     '\u2028': 'u2028',
     '\u2029': 'u2029'
   };
 
-  var escaper = /\\|'|\r|\n|\t|\u2028|\u2029/g;
+  var escaper = /\\|'|\r|\n|\u2028|\u2029/g;
+
+  var escapeChar = function(match) {
+    return '\\' + escapes[match];
+  };
 
   // JavaScript micro-templating, similar to John Resig's implementation.
   // Underscore templating handles arbitrary delimiters, preserves whitespace,
   // and correctly escapes quotes within interpolated code.
-  _.template = function(text, data, settings) {
-    var render;
+  // NB: `oldSettings` only exists for backwards compatibility.
+  _.template = function(text, settings, oldSettings) {
+    if (!settings && oldSettings) settings = oldSettings;
     settings = _.defaults({}, settings, _.templateSettings);
 
     // Combine delimiters into one regular expression via alternation.
-    var matcher = new RegExp([
+    var matcher = RegExp([
       (settings.escape || noMatch).source,
       (settings.interpolate || noMatch).source,
       (settings.evaluate || noMatch).source
@@ -79756,19 +79992,18 @@ module.define("underscore", function(exports, module) {
     var index = 0;
     var source = "__p+='";
     text.replace(matcher, function(match, escape, interpolate, evaluate, offset) {
-      source += text.slice(index, offset)
-        .replace(escaper, function(match) { return '\\' + escapes[match]; });
+      source += text.slice(index, offset).replace(escaper, escapeChar);
+      index = offset + match.length;
 
       if (escape) {
         source += "'+\n((__t=(" + escape + "))==null?'':_.escape(__t))+\n'";
-      }
-      if (interpolate) {
+      } else if (interpolate) {
         source += "'+\n((__t=(" + interpolate + "))==null?'':__t)+\n'";
-      }
-      if (evaluate) {
+      } else if (evaluate) {
         source += "';\n" + evaluate + "\n__p+='";
       }
-      index = offset + match.length;
+
+      // Adobe VMs need the match returned to produce the correct offest.
       return match;
     });
     source += "';\n";
@@ -79778,29 +80013,31 @@ module.define("underscore", function(exports, module) {
 
     source = "var __t,__p='',__j=Array.prototype.join," +
       "print=function(){__p+=__j.call(arguments,'');};\n" +
-      source + "return __p;\n";
+      source + 'return __p;\n';
 
     try {
-      render = new Function(settings.variable || 'obj', '_', source);
+      var render = new Function(settings.variable || 'obj', '_', source);
     } catch (e) {
       e.source = source;
       throw e;
     }
 
-    if (data) return render(data, _);
     var template = function(data) {
       return render.call(this, data, _);
     };
 
-    // Provide the compiled function source as a convenience for precompilation.
-    template.source = 'function(' + (settings.variable || 'obj') + '){\n' + source + '}';
+    // Provide the compiled source as a convenience for precompilation.
+    var argument = settings.variable || 'obj';
+    template.source = 'function(' + argument + '){\n' + source + '}';
 
     return template;
   };
 
-  // Add a "chain" function, which will delegate to the wrapper.
+  // Add a "chain" function. Start chaining a wrapped Underscore object.
   _.chain = function(obj) {
-    return _(obj).chain();
+    var instance = _(obj);
+    instance._chain = true;
+    return instance;
   };
 
   // OOP
@@ -79810,46 +80047,56 @@ module.define("underscore", function(exports, module) {
   // underscore functions. Wrapped objects may be chained.
 
   // Helper function to continue chaining intermediate results.
-  var result = function(obj) {
-    return this._chain ? _(obj).chain() : obj;
+  var result = function(instance, obj) {
+    return instance._chain ? _(obj).chain() : obj;
+  };
+
+  // Add your own custom functions to the Underscore object.
+  _.mixin = function(obj) {
+    _.each(_.functions(obj), function(name) {
+      var func = _[name] = obj[name];
+      _.prototype[name] = function() {
+        var args = [this._wrapped];
+        push.apply(args, arguments);
+        return result(this, func.apply(_, args));
+      };
+    });
   };
 
   // Add all of the Underscore functions to the wrapper object.
   _.mixin(_);
 
   // Add all mutator Array functions to the wrapper.
-  each(['pop', 'push', 'reverse', 'shift', 'sort', 'splice', 'unshift'], function(name) {
+  _.each(['pop', 'push', 'reverse', 'shift', 'sort', 'splice', 'unshift'], function(name) {
     var method = ArrayProto[name];
     _.prototype[name] = function() {
       var obj = this._wrapped;
       method.apply(obj, arguments);
-      if ((name == 'shift' || name == 'splice') && obj.length === 0) delete obj[0];
-      return result.call(this, obj);
+      if ((name === 'shift' || name === 'splice') && obj.length === 0) delete obj[0];
+      return result(this, obj);
     };
   });
 
   // Add all accessor Array functions to the wrapper.
-  each(['concat', 'join', 'slice'], function(name) {
+  _.each(['concat', 'join', 'slice'], function(name) {
     var method = ArrayProto[name];
     _.prototype[name] = function() {
-      return result.call(this, method.apply(this._wrapped, arguments));
+      return result(this, method.apply(this._wrapped, arguments));
     };
   });
 
-  _.extend(_.prototype, {
+  // Extracts the result from a wrapped and chained object.
+  _.prototype.value = function() {
+    return this._wrapped;
+  };
 
-    // Start chaining a wrapped Underscore object.
-    chain: function() {
-      this._chain = true;
-      return this;
-    },
+  // Provide unwrapping proxy for some methods used in engine operations
+  // such as arithmetic and JSON stringification.
+  _.prototype.valueOf = _.prototype.toJSON = _.prototype.value;
 
-    // Extracts the result from a wrapped and chained object.
-    value: function() {
-      return this._wrapped;
-    }
-
-  });
+  _.prototype.toString = function() {
+    return '' + this._wrapped;
+  };
 
   // AMD registration happens at the end for compatibility with AMD loaders
   // that may not enforce next-turn semantics on modules. Even though general
@@ -79863,12 +80110,619 @@ module.define("underscore", function(exports, module) {
       return _;
     });
   }
-}).call(this);
+}.call(this));
+});
+
+module.define("org/arangodb/aql/explainer", function(exports, module) {
+/*jshint strict: false, maxlen: 300 */
+
+var db = require("org/arangodb").db,
+  internal = require("internal"),
+  systemColors = internal.COLORS, 
+  print = internal.print,
+  colors = { };
+ 
+if (typeof internal.printBrowser === "function") {
+  print = internal.printBrowser;
+}
+
+/* set colors for output */
+function setColors (useSystemColors) {
+  'use strict';
+
+  [ "COLOR_RESET", 
+    "COLOR_CYAN", "COLOR_BLUE", "COLOR_GREEN", "COLOR_MAGENTA", "COLOR_YELLOW", "COLOR_RED", "COLOR_WHITE",
+    "COLOR_BOLD_CYAN", "COLOR_BOLD_BLUE", "COLOR_BOLD_GREEN", "COLOR_BOLD_MAGENTA", "COLOR_BOLD_YELLOW", 
+    "COLOR_BOLD_RED", "COLOR_BOLD_WHITE" ].forEach(function(c) {
+    colors[c] = useSystemColors ? systemColors[c] : "";
+  });
+}
+
+/* colorizer and output helper functions */ 
+
+function passthru (v) {
+  'use strict';
+  return v;
+}
+  
+function keyword (v) {
+  'use strict';
+  return colors.COLOR_CYAN + v + colors.COLOR_RESET;
+}
+
+function annotation (v) {
+  'use strict';
+  return colors.COLOR_BLUE + v + colors.COLOR_RESET;
+}
+
+function value (v) {
+  'use strict';
+  return colors.COLOR_GREEN + v + colors.COLOR_RESET;
+}
+  
+function variable (v) {
+  'use strict';
+  if (v[0] === "#") {
+    return colors.COLOR_MAGENTA + v + colors.COLOR_RESET;
+  }
+  return colors.COLOR_YELLOW + v + colors.COLOR_RESET;
+}
+
+function func (v) {
+  'use strict';
+  return colors.COLOR_GREEN + v + colors.COLOR_RESET;
+}
+  
+function collection (v) {
+  'use strict';
+  return colors.COLOR_RED + v + colors.COLOR_RESET;
+}
+
+function attribute (v) {
+  'use strict';
+  return "`" + colors.COLOR_YELLOW + v + colors.COLOR_RESET + "`";
+}
+
+function header (v) {
+  'use strict';
+  return colors.COLOR_MAGENTA + v + colors.COLOR_RESET;
+}
+
+function section (v) {
+  'use strict';
+  return colors.COLOR_BOLD_BLUE + v + colors.COLOR_RESET;
+}
+
+function pad (n) {
+  'use strict';
+  return new Array(n).join(" ");
+}
+
+function wrap (str, width) { 
+  'use strict';
+  var re = ".{1," + width + "}(\\s|$)|\\S+?(\\s|$)";
+  return str.match(new RegExp(re, "g")).join("\n");
+}
+
+ 
+/* print functions */
+
+/* print query string */  
+function printQuery (query) {
+  'use strict';
+  print(section("Query string:"));
+  print(" " + value(wrap(query, 100).replace(/\n/g, "\n ", query)));
+  print(); 
+}
+
+/* print write query modification flags */
+function printModificationFlags (flags) {
+  'use strict';
+  if (flags === undefined) {
+    return;
+  }
+  print(section("Write query options:"));
+  var keys = Object.keys(flags), maxLen = "Option".length;
+  keys.forEach(function(k) {
+    if (k.length > maxLen) {
+      maxLen = k.length;
+    }
+  });
+  print(" " + header("Option") + pad(1 + maxLen - "Option".length) + "   " + header("Value"));
+  keys.forEach(function(k) {
+    print(" " + keyword(k) + pad(1 + maxLen - k.length) + "   " + value(JSON.stringify(flags[k]))); 
+  });
+  print();
+}
+
+/* print optimizer rules */
+function printRules (rules) {
+  'use strict';
+  print(section("Optimization rules applied:"));
+  if (rules.length === 0) {
+    print(" " + value("none"));
+  }
+  else {
+    var maxIdLen = String("Id").length;
+    print(" " + pad(1 + maxIdLen - String("Id").length) + header("Id") + "   " + header("RuleName"));
+    for (var i = 0; i < rules.length; ++i) {
+      print(" " + pad(1 + maxIdLen - String(i + 1).length) + variable(String(i + 1)) + "   " + keyword(rules[i]));
+    }
+  }
+  print(); 
+}
+
+/* print warnings */
+function printWarnings (warnings) {
+  'use strict';
+  if (! Array.isArray(warnings) || warnings.length === 0) {
+    return;
+  }
+
+  print(section("Warnings:"));
+  var maxIdLen = String("Code").length;
+  print(" " + pad(1 + maxIdLen - String("Code").length) + header("Code") + "   " + header("Message"));
+  for (var i = 0; i < warnings.length; ++i) {
+    print(" " + pad(1 + maxIdLen - String(warnings[i].code).length) + variable(warnings[i].code) + "   " + keyword(warnings[i].message));
+  }
+  print(); 
+}
+
+/* print indexes used */
+function printIndexes (indexes) {
+  'use strict';
+  print(section("Indexes used:"));
+  if (indexes.length === 0) {
+    print(" " + value("none"));
+  }
+  else {
+    var maxIdLen = String("Id").length;
+    var maxCollectionLen = String("Collection").length;
+    var maxUniqueLen = String("Unique").length; 
+    var maxSparseLen = String("Sparse").length; 
+    var maxTypeLen = String("Type").length;
+    var maxSelectivityLen = String("Selectivity Est.").length;
+    var maxFieldsLen = String("Fields").length;
+    indexes.forEach(function(index) {
+      var l = String(index.node).length;
+      if (l > maxIdLen) {
+        maxIdLen = l;
+      }
+      l = index.type.length;
+      if (l > maxTypeLen) {
+        maxTypeLen = l;
+      }
+      l = index.fields.map(passthru).join(", ").length;
+      if (l > maxFieldsLen) {
+        maxFieldsLen = l; 
+      }
+      l = index.collection.length;
+      if (l > maxCollectionLen) {
+        maxCollectionLen = l; 
+      }
+    });
+    var line = " " + pad(1 + maxIdLen - String("Id").length) + header("Id") + "   " + 
+               header("Type") + pad(1 + maxTypeLen - "Type".length) + "   " + 
+               header("Collection") + pad(1 + maxCollectionLen - "Collection".length) + "   " +
+               header("Unique") + pad(1 + maxUniqueLen - "Unique".length) + "   " + 
+               header("Sparse") + pad(1 + maxSparseLen - "Sparse".length) + "   " + 
+               header("Selectivity Est.") + "   " + 
+               header("Fields") + pad(1 + maxFieldsLen - "Fields".length) + "   " +
+               header("Ranges");
+    print(line);
+ 
+    for (var i = 0; i < indexes.length; ++i) {
+      var uniqueness = (indexes[i].unique ? "true" : "false");
+      var sparsity = (indexes[i].hasOwnProperty("sparse") ? (indexes[i].sparse ? "true" : "false") : "n/a");
+      var fields = indexes[i].fields.map(attribute).join(", ");
+      var fieldsLen = indexes[i].fields.map(passthru).join(", ").length;
+      var ranges = "[ " + indexes[i].ranges + " ]";
+      var selectivity = (indexes[i].hasOwnProperty("selectivityEstimate") ? 
+        (indexes[i].selectivityEstimate * 100).toFixed(2) + " %" : 
+        "n/a"
+      );
+      line = " " + 
+        pad(1 + maxIdLen - String(indexes[i].node).length) + variable(String(indexes[i].node)) + "   " + 
+        keyword(indexes[i].type) + pad(1 + maxTypeLen - indexes[i].type.length) + "   " +
+        collection(indexes[i].collection) + pad(1 + maxCollectionLen - indexes[i].collection.length) + "   " +
+        value(uniqueness) + pad(1 + maxUniqueLen - uniqueness.length) + "   " +
+        value(sparsity) + pad(1 + maxSparseLen - sparsity.length) + "   " +
+        pad(1 + maxSelectivityLen - selectivity.length) + value(selectivity) + "   " +
+        fields + pad(1 + maxFieldsLen - fieldsLen) + "   " + 
+        ranges;
+      print(line);
+    }
+  }
+  print(); 
+}
+
+/* analzye and print execution plan */
+function processQuery (query, explain) {
+  'use strict';
+  var nodes = { }, 
+    parents = { }, 
+    rootNode = null,
+    maxTypeLen = 0,
+    maxIdLen = String("Id").length,
+    maxEstimateLen = String("Est.").length,
+    plan = explain.plan;
+
+  var recursiveWalk = function (n, level) {
+    n.forEach(function(node) {
+      nodes[node.id] = node;
+      if (level === 0 && node.dependencies.length === 0) {
+        rootNode = node.id;
+      }
+      if (node.type === "SubqueryNode") {
+        recursiveWalk(node.subquery.nodes, level + 1);
+      }
+      node.dependencies.forEach(function(d) {
+        if (! parents.hasOwnProperty(d)) {
+          parents[d] = [ ];
+        }
+        parents[d].push(node.id);
+      });
+
+      if (String(node.id).length > maxIdLen) {
+        maxIdLen = String(node.id).length;
+      }
+      if (String(node.type).length > maxTypeLen) {
+        maxTypeLen = String(node.type).length;
+      }
+      if (String(node.estimatedNrItems).length > maxEstimateLen) {
+        maxEstimateLen = String(node.estimatedNrItems).length;
+      }
+    });
+  };
+  recursiveWalk(plan.nodes, 0);
+
+  var references = { }, 
+    collectionVariables = { }, 
+    usedVariables = { },
+    indexes = [ ], 
+    modificationFlags,
+    isConst = true;
+
+  var variableName = function (node) {
+    if (/^[0-9_]/.test(node.name)) {
+      return variable("#" + node.name);
+    }
+   
+    if (collectionVariables.hasOwnProperty(node.id)) {
+      usedVariables[node.name] = collectionVariables[node.id];
+    }
+    return variable(node.name); 
+  };
+
+  var buildExpression = function (node) {
+    isConst = isConst && ([ "value", "object", "object element", "array" ].indexOf(node.type) !== -1);
+
+    switch (node.type) {
+      case "reference": 
+        if (references.hasOwnProperty(node.name)) {
+          return buildExpression(references[node.name]) + "[*]";
+        }
+        return variableName(node);
+      case "collection": 
+        return collection(node.name) + "   " + annotation("/* all collection documents */");
+      case "value":
+        return value(JSON.stringify(node.value));
+      case "object":
+        if (node.hasOwnProperty("subNodes")) {
+          return "{ " + node.subNodes.map(buildExpression).join(", ") + " }";
+        }
+        return "{ }";
+      case "object element":
+        return value(JSON.stringify(node.name)) + " : " + buildExpression(node.subNodes[0]);
+      case "array":
+        if (node.hasOwnProperty("subNodes")) {
+          return "[ " + node.subNodes.map(buildExpression).join(", ") + " ]";
+        }
+        return "[ ]";
+      case "unary not":
+        return "! " + buildExpression(node.subNodes[0]);
+      case "unary plus":
+        return "+ " + buildExpression(node.subNodes[0]);
+      case "unary minus":
+        return "- " + buildExpression(node.subNodes[0]);
+      case "attribute access":
+        return buildExpression(node.subNodes[0]) + "." + attribute(node.name);
+      case "indexed access":
+        return buildExpression(node.subNodes[0]) + "[" + buildExpression(node.subNodes[1]) + "]";
+      case "range":
+        return buildExpression(node.subNodes[0]) + " .. " + buildExpression(node.subNodes[1]) + "   " + annotation("/* range */");
+      case "expand":
+        references[node.subNodes[0].subNodes[0].name] = node.subNodes[0].subNodes[1];
+        return buildExpression(node.subNodes[1]);
+      case "user function call":
+        return func(node.name) + "(" + ((node.subNodes && node.subNodes[0].subNodes) || [ ]).map(buildExpression).join(", ") + ")" + "   " + annotation("/* user-defined function */");
+      case "function call":
+        return func(node.name) + "(" + ((node.subNodes && node.subNodes[0].subNodes) || [ ]).map(buildExpression).join(", ") + ")";
+      case "plus":
+        return buildExpression(node.subNodes[0]) + " + " + buildExpression(node.subNodes[1]);
+      case "minus":
+        return buildExpression(node.subNodes[0]) + " - " + buildExpression(node.subNodes[1]);
+      case "times":
+        return buildExpression(node.subNodes[0]) + " * " + buildExpression(node.subNodes[1]);
+      case "division":
+        return buildExpression(node.subNodes[0]) + " / " + buildExpression(node.subNodes[1]);
+      case "modulus":
+        return buildExpression(node.subNodes[0]) + " % " + buildExpression(node.subNodes[1]);
+      case "compare not in":
+        return buildExpression(node.subNodes[0]) + " not in " + buildExpression(node.subNodes[1]);
+      case "compare in":
+        return buildExpression(node.subNodes[0]) + " in " + buildExpression(node.subNodes[1]);
+      case "compare ==":
+        return buildExpression(node.subNodes[0]) + " == " + buildExpression(node.subNodes[1]);
+      case "compare !=":
+        return buildExpression(node.subNodes[0]) + " != " + buildExpression(node.subNodes[1]);
+      case "compare >":
+        return buildExpression(node.subNodes[0]) + " > " + buildExpression(node.subNodes[1]);
+      case "compare >=":
+        return buildExpression(node.subNodes[0]) + " >= " + buildExpression(node.subNodes[1]);
+      case "compare <":
+        return buildExpression(node.subNodes[0]) + " < " + buildExpression(node.subNodes[1]);
+      case "compare <=":
+        return buildExpression(node.subNodes[0]) + " <= " + buildExpression(node.subNodes[1]);
+      case "logical or":
+        return buildExpression(node.subNodes[0]) + " || " + buildExpression(node.subNodes[1]);
+      case "logical and":
+        return buildExpression(node.subNodes[0]) + " && " + buildExpression(node.subNodes[1]);
+      case "ternary":
+        return buildExpression(node.subNodes[0]) + " ? " + buildExpression(node.subNodes[1]) + " : " + buildExpression(node.subNodes[2]);
+      default: 
+        return "unhandled node type (" + node.type + ")";
+    }
+  };
+
+  var buildBound = function (attr, operators, bound) {
+    var boundValue = bound.isConstant ? value(JSON.stringify(bound.bound)) : buildExpression(bound.bound);
+    return attribute(attr) + " " + operators[bound.include ? 1 : 0] + " " + boundValue;
+  };
+
+  var buildRanges = function (ranges) {
+    var results = [ ];
+    ranges.forEach(function(range) {
+      var attr = range.attr;
+
+      if (range.lowConst.hasOwnProperty("bound") && range.highConst.hasOwnProperty("bound") &&
+          JSON.stringify(range.lowConst.bound) === JSON.stringify(range.highConst.bound)) {
+        range.equality = true;
+      }
+
+      if (range.equality) {
+        if (range.lowConst.hasOwnProperty("bound")) {
+          results.push(buildBound(attr, [ "==", "==" ], range.lowConst));
+        }
+        else if (range.hasOwnProperty("lows")) {
+          range.lows.forEach(function(bound) {
+            results.push(buildBound(attr, [ "==", "==" ], bound));
+          });
+        }
+      }
+      else {
+        if (range.lowConst.hasOwnProperty("bound")) {
+          results.push(buildBound(attr, [ ">", ">=" ], range.lowConst));
+        }
+        if (range.highConst.hasOwnProperty("bound")) {
+          results.push(buildBound(attr, [ "<", "<=" ], range.highConst));
+        }
+        if (range.hasOwnProperty("lows")) {
+          range.lows.forEach(function(bound) {
+            results.push(buildBound(attr, [ ">", ">=" ], bound));
+          });
+        }
+        if (range.hasOwnProperty("highs")) {
+          range.highs.forEach(function(bound) {
+            results.push(buildBound(attr, [ "<", "<=" ], bound));
+          });
+        }
+      }
+    });
+    if (results.length > 1) { 
+      return "(" + results.join(" && ") + ")"; 
+    }
+    return results[0]; 
+  };
+
+
+  var label = function (node) { 
+    switch (node.type) {
+      case "SingletonNode":
+        return keyword("ROOT");
+      case "NoResultsNode":
+        return keyword("EMPTY") + "   " + annotation("/* empty result set */");
+      case "EnumerateCollectionNode":
+        collectionVariables[node.outVariable.id] = node.collection;
+        return keyword("FOR") + " " + variableName(node.outVariable) + " " + keyword("IN") + " " + collection(node.collection) + "   " + annotation("/* full collection scan" + (node.random ? ", random order" : "") + " */");
+      case "EnumerateListNode":
+        return keyword("FOR") + " " + variableName(node.outVariable) + " " + keyword("IN") + " " + variableName(node.inVariable) + "   " + annotation("/* list iteration */");
+      case "IndexRangeNode":
+        collectionVariables[node.outVariable.id] = node.collection;
+        var index = node.index;
+        index.ranges = node.ranges.map(buildRanges).join(" || ");
+        index.collection = node.collection;
+        index.node = node.id;
+        indexes.push(index);
+        return keyword("FOR") + " " + variableName(node.outVariable) + " " + keyword("IN") + " " + collection(node.collection) + "   " + annotation("/* " + (node.reverse ? "reverse " : "") + node.index.type + " index scan") + annotation("*/");
+      case "CalculationNode":
+        return keyword("LET") + " " + variableName(node.outVariable) + " = " + buildExpression(node.expression);
+      case "FilterNode":
+        return keyword("FILTER") + " " + variableName(node.inVariable);
+      case "AggregateNode":
+        return keyword("COLLECT") + " " + node.aggregates.map(function(node) {
+          return variableName(node.outVariable) + " = " + variableName(node.inVariable);
+        }).join(", ") + 
+                 (node.count ? " " + keyword("WITH COUNT") : "") + 
+                 (node.outVariable ? " " + keyword("INTO") + " " + variableName(node.outVariable) : "") +
+                 (node.keepVariables ? " " + keyword("KEEP") + " " + node.keepVariables.map(function(variable) { return variableName(variable); }).join(", ") : "");
+      case "SortNode":
+        return keyword("SORT") + " " + node.elements.map(function(node) {
+          return variableName(node.inVariable) + " " + keyword(node.ascending ? "ASC" : "DESC"); 
+        }).join(", ");
+      case "LimitNode":
+        return keyword("LIMIT") + " " + value(JSON.stringify(node.offset)) + ", " + value(JSON.stringify(node.limit)); 
+      case "ReturnNode":
+        return keyword("RETURN") + " " + variableName(node.inVariable);
+      case "SubqueryNode":
+        return keyword("LET") + " " + variableName(node.outVariable) + " = ...   " + annotation("/* subquery */");
+      case "InsertNode":
+        modificationFlags = node.modificationFlags;
+        return keyword("INSERT") + " " + variableName(node.inVariable) + " " + keyword("IN") + " " + collection(node.collection);
+      case "UpdateNode":
+        modificationFlags = node.modificationFlags;
+        if (node.hasOwnProperty("inKeyVariable")) {
+          return keyword("UPDATE") + " " + variableName(node.inKeyVariable) + " " + keyword("WITH") + " " + variableName(node.inDocVariable) + " " + keyword("IN") + " " + collection(node.collection);
+        }
+        return keyword("UPDATE") + " " + variableName(node.inDocVariable) + " " + keyword("IN") + " " + collection(node.collection);
+      case "ReplaceNode":
+        modificationFlags = node.modificationFlags;
+        if (node.hasOwnProperty("inKeyVariable")) {
+          return keyword("REPLACE") + " " + variableName(node.inKeyVariable) + " " + keyword("WITH") + " " + variableName(node.inDocVariable) + " " + keyword("IN") + " " + collection(node.collection);
+        }
+        return keyword("REPLACE") + " " + variableName(node.inDocVariable) + " " + keyword("IN") + " " + collection(node.collection);
+      case "UpsertNode":
+        modificationFlags = node.modificationFlags;
+        return keyword("UPSERT") + " " + variableName(node.inDocVariable) + " " + keyword("INSERT") + " " + variableName(node.insertVariable) + " " + keyword(node.isReplace ? "REPLACE" : "UPDATE") + variableName(node.updateVariable) + " " + keyword("IN") + " " + collection(node.collection);
+      case "RemoveNode":
+        modificationFlags = node.modificationFlags;
+        return keyword("REMOVE") + " " + variableName(node.inVariable) + " " + keyword("IN") + " " + collection(node.collection);
+      case "RemoteNode":
+        return keyword("REMOTE");
+      case "DistributeNode":
+        return keyword("DISTRIBUTE");
+      case "ScatterNode":
+        return keyword("SCATTER");
+      case "GatherNode":
+        return keyword("GATHER");
+    }
+
+    return "unhandled node type (" + node.type + ")";
+  };
+ 
+  var level = 0, subqueries = [ ];
+  var indent = function (level, isRoot) {
+    return pad(1 + level + level) + (isRoot ? "* " : "- ");
+  };
+
+  var preHandle = function (node) {
+    usedVariables = { };
+    isConst = true;
+    if (node.type === "SubqueryNode") {
+      subqueries.push(level);
+    }
+  };
+
+  var postHandle = function (node) {
+    if ([ "EnumerateCollectionNode",
+          "EnumerateListNode",
+          "IndexRangeNode",
+          "SubqueryNode" ].indexOf(node.type) !== -1) {
+      level++;
+    }
+    else if (node.type === "ReturnNode" && subqueries.length > 0) {
+      level = subqueries.pop();
+    }
+    else if (node.type === "SingletonNode") {
+      level++;
+    }
+  };
+
+  var constNess = function () {
+    if (isConst) {
+      return "   " + annotation("/* const assignment */");
+    }
+    return "";
+  };
+
+  var variablesUsed = function () {
+    var used = [ ];
+    for (var a in usedVariables) { 
+      if (usedVariables.hasOwnProperty(a)) {
+        used.push(variable(a) + " : " + collection(usedVariables[a]));
+      }
+    }
+    if (used.length > 0) {
+      return "   " + annotation("/* collections used:") + " " + used.join(", ") + " " + annotation("*/");
+    }
+    return "";
+  };
+    
+  var printNode = function (node) {
+    preHandle(node);
+    var line = " " +  
+      pad(1 + maxIdLen - String(node.id).length) + variable(node.id) + "   " +
+      keyword(node.type) + pad(1 + maxTypeLen - String(node.type).length) + "   " + 
+      pad(1 + maxEstimateLen - String(node.estimatedNrItems).length) + value(node.estimatedNrItems) + "   " +
+      indent(level, node.type === "SingletonNode") + label(node);
+
+    if (node.type === "CalculationNode") {
+      line += variablesUsed() + constNess();
+    } 
+    print(line);
+    postHandle(node);
+  };
+  
+  printQuery(query);
+  
+  print(section("Execution plan:"));
+
+  var line = " " + 
+    pad(1 + maxIdLen - String("Id").length) + header("Id") + "   " +
+    header("NodeType") + pad(1 + maxTypeLen - String("NodeType").length) + "   " +   
+    pad(1 + maxEstimateLen - String("Est.").length) + header("Est.") + "   " +
+    header("Comment");
+  print(line);
+
+
+  var walk = [ rootNode ];
+  while (walk.length > 0) {
+    var id = walk.pop();
+    var node = nodes[id];
+    printNode(node);
+    if (parents.hasOwnProperty(id)) {
+      walk = walk.concat(parents[id]);
+    }
+    if (node.type === "SubqueryNode") {
+      walk = walk.concat([ node.subquery.nodes[0].id ]);
+    }
+  }
+
+  print();
+  
+  printIndexes(indexes);
+  printRules(plan.rules);
+  printModificationFlags(modificationFlags);
+  printWarnings(explain.warnings);
+}
+
+/* the exposed function */
+function explain (data, options) { 
+  'use strict';
+  if (typeof data === "string") {
+    data = { query: data };
+  }
+  if (! (data instanceof Object)) {
+    throw "ArangoStatement needs initial data";
+  }
+
+  options = options || { };
+  setColors(options.colors === undefined ? true : options.colors);
+
+  var stmt = db._createStatement(data);
+  var result = stmt.explain(options);
+
+  print();
+  processQuery(data.query, result);
+  print();
+}
+
+exports.explain = explain;
+
 });
 
 module.define("org/arangodb/aql/functions", function(exports, module) {
 /*jshint strict: false */
-/*global require, exports */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief AQL user functions management
@@ -79916,7 +80770,7 @@ var ArangoError = arangodb.ArangoError;
 ////////////////////////////////////////////////////////////////////////////////
 
 var getStorage = function () {
-  "use strict";
+  'use strict';
 
   var functions = db._collection("_aqlfunctions");
 
@@ -79936,7 +80790,7 @@ var getStorage = function () {
 ////////////////////////////////////////////////////////////////////////////////
 
 var getFiltered = function (group) {
-  "use strict";
+  'use strict';
 
   var result = [ ];
 
@@ -79965,7 +80819,7 @@ var getFiltered = function (group) {
 ////////////////////////////////////////////////////////////////////////////////
 
 var validateName = function (name) {
-  "use strict";
+  'use strict';
 
   if (typeof name !== 'string' ||
       ! name.match(/^[a-zA-Z0-9_]+(::[a-zA-Z0-9_]+)+$/) ||
@@ -79983,7 +80837,7 @@ var validateName = function (name) {
 ////////////////////////////////////////////////////////////////////////////////
 
 var stringifyFunction = function (code, name) {
-  "use strict";
+  'use strict';
 
   if (typeof code === 'function') {
     code = String(code) + "\n";
@@ -80041,7 +80895,7 @@ var stringifyFunction = function (code, name) {
 ////////////////////////////////////////////////////////////////////////////////
 
 var unregisterFunction = function (name) {
-  "use strict";
+  'use strict';
 
   var func = null;
 
@@ -80089,7 +80943,7 @@ var unregisterFunction = function (name) {
 ////////////////////////////////////////////////////////////////////////////////
 
 var unregisterFunctionsGroup = function (group) {
-  "use strict";
+  'use strict';
 
   if (group.length === 0) {
     var err = new ArangoError();
@@ -80256,7 +81110,7 @@ var registerFunction = function (name, code, isDeterministic) {
 ////////////////////////////////////////////////////////////////////////////////
 
 var toArrayFunctions = function (group) {
-  "use strict";
+  'use strict';
 
   var result = [ ];
 
@@ -80287,9 +81141,135 @@ exports.toArray         = toArrayFunctions;
 
 });
 
+module.define("org/arangodb/aql/queries", function(exports, module) {
+'use strict';
+
+////////////////////////////////////////////////////////////////////////////////
+/// @brief AQL query management
+///
+/// @file
+///
+/// DISCLAIMER
+///
+/// Copyright 2012 triagens GmbH, Cologne, Germany
+///
+/// Licensed under the Apache License, Version 2.0 (the "License");
+/// you may not use this file except in compliance with the License.
+/// You may obtain a copy of the License at
+///
+///     http://www.apache.org/licenses/LICENSE-2.0
+///
+/// Unless required by applicable law or agreed to in writing, software
+/// distributed under the License is distributed on an "AS IS" BASIS,
+/// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+/// See the License for the specific language governing permissions and
+/// limitations under the License.
+///
+/// Copyright holder is triAGENS GmbH, Cologne, Germany
+///
+/// @author Jan Steemann
+/// @author Copyright 2013, triAGENS GmbH, Cologne, Germany
+////////////////////////////////////////////////////////////////////////////////
+
+var internal = require("internal");
+var arangosh = require("org/arangodb/arangosh");
+
+// -----------------------------------------------------------------------------
+// --SECTION--                                 module "org/arangodb/aql/queries"
+// -----------------------------------------------------------------------------
+
+////////////////////////////////////////////////////////////////////////////////
+/// @brief clears the slow query log
+////////////////////////////////////////////////////////////////////////////////
+
+exports.clearSlow = function () {
+  var db = internal.db;
+
+  var requestResult = db._connection.DELETE("/_api/query/slow", "");
+  arangosh.checkRequestResult(requestResult);
+
+  return requestResult;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+/// @brief returns the slow queries
+////////////////////////////////////////////////////////////////////////////////
+
+exports.slow = function () {
+  var db = internal.db;
+
+  var requestResult = db._connection.GET("/_api/query/slow", "");
+  arangosh.checkRequestResult(requestResult);
+
+  return requestResult;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+/// @brief returns the current queries
+////////////////////////////////////////////////////////////////////////////////
+
+exports.current = function () {
+  var db = internal.db;
+
+  var requestResult = db._connection.GET("/_api/query/current", "");
+  arangosh.checkRequestResult(requestResult);
+
+  return requestResult;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+/// @brief configures the query tracking properties
+////////////////////////////////////////////////////////////////////////////////
+
+exports.properties = function (config) {
+  var db = internal.db;
+
+  var requestResult;
+  if (config === undefined) {
+    requestResult = db._connection.GET("/_api/query/properties");
+  }
+  else {
+    requestResult = db._connection.PUT("/_api/query/properties",
+      JSON.stringify(config));
+  }
+
+  arangosh.checkRequestResult(requestResult);
+
+  return requestResult;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+/// @brief kills a query
+////////////////////////////////////////////////////////////////////////////////
+
+exports.kill = function (id) {
+  if (typeof id === 'object' && 
+      id.hasOwnProperty('id')) {
+    id = id.id;
+  }
+
+  var db = internal.db;
+
+  var requestResult = db._connection.DELETE("/_api/query/" + encodeURIComponent(id), "");
+  arangosh.checkRequestResult(requestResult);
+
+  return requestResult;
+};
+
+// -----------------------------------------------------------------------------
+// --SECTION--                                                       END-OF-FILE
+// -----------------------------------------------------------------------------
+
+// Local Variables:
+// mode: outline-minor
+// outline-regexp: "/// @brief\\|/// @addtogroup\\|// --SECTION--\\|/// @page\\|/// @}\\|/\\*jslint"
+// End:
+
+});
+
 module.define("org/arangodb/graph/traversal", function(exports, module) {
 /*jshint strict: false, unused: false */
-/*global require, exports, ArangoClusterComm */
+/*global ArangoClusterComm, AQL_QUERY_IS_KILLED */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief Traversal "classes"
@@ -80335,6 +81315,30 @@ var ArangoTraverser;
 // -----------------------------------------------------------------------------
 
 ////////////////////////////////////////////////////////////////////////////////
+/// @brief whether or not the query was aborted
+/// use the AQL_QUERY_IS_KILLED function on the server side, and a dummy 
+/// function otherwise (ArangoShell etc.)
+////////////////////////////////////////////////////////////////////////////////
+
+var throwIfAborted = function () {
+};
+
+try {
+  if (typeof AQL_QUERY_IS_KILLED === "function") {
+    throwIfAborted = function () { 
+      if (AQL_QUERY_IS_KILLED()) {
+        var err = new ArangoError();
+        err.errorNum = arangodb.errors.ERROR_QUERY_KILLED.code;
+        err.errorMessage = arangodb.errors.ERROR_QUERY_KILLED.message;
+        throw err;
+      }
+    };
+  }
+}
+catch (err) {
+}
+
+////////////////////////////////////////////////////////////////////////////////
 /// @brief clone any object
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -80362,6 +81366,20 @@ function clone (obj) {
 
   return copy;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+/// @brief test if object is empty
+////////////////////////////////////////////////////////////////////////////////
+
+function isEmpty(obj) {
+  for(var key in obj) {
+    if (obj.hasOwnProperty(key)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief traversal abortion exception
@@ -81189,6 +82207,8 @@ function breadthFirstSearch () {
           throw err;
         }
 
+        throwIfAborted();
+
         if (current.visit === null || current.visit === undefined) {
           current.visit = false;
 
@@ -81298,6 +82318,8 @@ function depthFirstSearch () {
           err.errorMessage = arangodb.errors.ERROR_GRAPH_TOO_MANY_ITERATIONS.message;
           throw err;
         }
+        
+        throwIfAborted();
 
         // peek at the top of the stack
         var current = toVisit[toVisit.length - 1];
@@ -81442,6 +82464,8 @@ function dijkstraSearch () {
           err.errorMessage = arangodb.errors.ERROR_GRAPH_TOO_MANY_ITERATIONS.message;
           throw err;
         }
+        
+        throwIfAborted();
 
         var currentNode = heap.pop();
         var i, n;
@@ -81456,6 +82480,136 @@ function dijkstraSearch () {
             }
           }
           return;
+        }
+
+        if (currentNode.visited) {
+          continue;
+        }
+
+        if (currentNode.dist === Infinity) {
+          break;
+        }
+
+        currentNode.visited = true;
+
+        var path = this.buildPath(currentNode);
+        var filterResult = parseFilterResult(config.filter(config, currentNode.vertex, path));
+
+        if (! filterResult.visit) {
+          currentNode.hide = true;
+        }
+
+        if (! filterResult.expand) {
+          continue;
+        }
+
+        var dist = currentNode.dist;
+        var connected = config.expander(config, currentNode.vertex, path);
+        n = connected.length;
+
+        for (i = 0; i < n; ++i) {
+          var neighbor = this.makeNode(connected[i].vertex);
+
+          if (neighbor.visited) {
+            continue;
+          }
+
+          var edge = connected[i].edge;
+          var weight = 1;
+          if (config.distance) {
+            weight = config.distance(config, currentNode.vertex, neighbor.vertex, edge);
+          }
+          else if (config.weight) {
+            if (typeof edge[config.weight] === "number") {
+              weight = edge[config.weight];
+            }
+            else if (config.defaultWeight) {
+              weight = config.defaultWeight;
+            }
+            else {
+              weight = Infinity;
+            }
+          }
+
+          var alt = dist + weight;
+          if (alt < neighbor.dist) {
+            neighbor.dist = alt;
+            neighbor.parent = currentNode;
+            neighbor.parentEdge = edge;
+            heap.push(neighbor);
+          }
+        }
+      }
+    }
+  };
+}
+
+function dijkstraSearchMulti () {
+  return {
+    nodes: { },
+
+    requiresEndVertex: function () {
+      return true;
+    },
+
+    makeNode: function (vertex) {
+      var id = vertex._id;
+      if (! this.nodes.hasOwnProperty(id)) {
+        this.nodes[id] = { vertex: vertex, dist: Infinity };
+      }
+
+      return this.nodes[id];
+    },
+
+    vertexList: function (vertex) {
+      var result = [ ];
+      while (vertex) {
+        result.push(vertex);
+        vertex = vertex.parent;
+      }
+      return result;
+    },
+
+    buildPath: function (vertex) {
+      var path = { vertices: [ vertex.vertex ], edges: [ ] };
+      var v = vertex;
+
+      while (v.parent) {
+        path.vertices.unshift(v.parent.vertex);
+        path.edges.unshift(v.parentEdge);
+        v = v.parent;
+      }
+      return path;
+    },
+
+    run: function (config, result, startVertex, endVertex) {
+      var maxIterations = config.maxIterations, visitCounter = 0;
+
+      var heap = new BinaryHeap(function (node) {
+        return node.dist;
+      });
+
+      var startNode = this.makeNode(startVertex);
+      startNode.dist = 0;
+      heap.push(startNode);
+
+      while (heap.size() > 0) {
+        if (visitCounter++ > maxIterations) {
+          var err = new ArangoError();
+          err.errorNum = arangodb.errors.ERROR_GRAPH_TOO_MANY_ITERATIONS.code;
+          err.errorMessage = arangodb.errors.ERROR_GRAPH_TOO_MANY_ITERATIONS.message;
+          throw err;
+        }
+
+        var currentNode = heap.pop();
+        var i, n;
+
+        if (endVertex.hasOwnProperty(currentNode.vertex._id)) {
+          delete endVertex[currentNode.vertex._id];
+          config.visitor(config, result, currentNode, this.buildPath(currentNode));
+          if (isEmpty(endVertex)) {
+            return;
+          }
         }
 
         if (currentNode.visited) {
@@ -81579,6 +82733,8 @@ function astarSearch () {
           err.errorMessage = arangodb.errors.ERROR_GRAPH_TOO_MANY_ITERATIONS.message;
           throw err;
         }
+
+        throwIfAborted();
 
         var currentNode = heap.pop();
         var i, n;
@@ -81735,7 +82891,8 @@ ArangoTraverser = function (config) {
     depthfirst: ArangoTraverser.DEPTH_FIRST,
     breadthfirst: ArangoTraverser.BREADTH_FIRST,
     astar: ArangoTraverser.ASTAR_SEARCH,
-    dijkstra: ArangoTraverser.DIJKSTRA_SEARCH
+    dijkstra: ArangoTraverser.DIJKSTRA_SEARCH,
+    dijkstramulti: ArangoTraverser.DIJKSTRA_SEARCH_MULTI
   }, "strategy");
 
   config.order = validate(config.order, {
@@ -81846,6 +83003,9 @@ ArangoTraverser.prototype.traverse = function (result, startVertex, endVertex) {
   else if (this.config.strategy === ArangoTraverser.DIJKSTRA_SEARCH) {
     strategy = dijkstraSearch();
   }
+  else if (this.config.strategy === ArangoTraverser.DIJKSTRA_SEARCH_MULTI) {
+    strategy = dijkstraSearchMulti();
+  }
   else if (this.config.strategy === ArangoTraverser.BREADTH_FIRST) {
     strategy = breadthFirstSearch();
   }
@@ -81933,6 +83093,12 @@ ArangoTraverser.ASTAR_SEARCH         = 2;
 ArangoTraverser.DIJKSTRA_SEARCH      = 3;
 
 ////////////////////////////////////////////////////////////////////////////////
+/// @brief dijkstra search with multiple end vertices
+////////////////////////////////////////////////////////////////////////////////
+
+ArangoTraverser.DIJKSTRA_SEARCH_MULTI = 4;
+
+////////////////////////////////////////////////////////////////////////////////
 /// @brief pre-order traversal, visitor called before expander
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -82013,7 +83179,6 @@ exports.Traverser                       = ArangoTraverser;
 
 module.define("org/arangodb/arango-collection-common", function(exports, module) {
 /*jshint strict: false, unused: false, maxlen: 200 */
-/*global require */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief ArangoCollection
@@ -83056,7 +84221,6 @@ ArangoCollection.prototype.updateByExample = function (example, newValue, keepNu
 
 module.define("org/arangodb/arango-collection", function(exports, module) {
 /*jshint strict: false */
-/*global require, exports */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief ArangoCollection
@@ -84439,7 +85603,6 @@ ArangoCollection.prototype.updateByExample = function (example,
 
 module.define("org/arangodb/arango-database", function(exports, module) {
 /*jshint strict: false */
-/*global require, exports */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief ArangoDatabase
@@ -85484,7 +86647,7 @@ ArangoDatabase.prototype._executeTransaction = function (data) {
 
 module.define("org/arangodb/arango-query-cursor", function(exports, module) {
 /*jshint strict: false */
-/*global require, exports */
+/*global more:true */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief ArangoQueryCursor
@@ -85563,19 +86726,34 @@ exports.ArangoQueryCursor = ArangoQueryCursor;
 ////////////////////////////////////////////////////////////////////////////////
 
 ArangoQueryCursor.prototype.toString = function () {
-  var result = "[object ArangoQueryCursor";
-  if (this.data.id) {
-    result += ":" + this.data.id;
+  var rows = [ ], i = 0;
+  while (++i <= 10 && this.hasNext()) {
+    rows.push(this.next());
   }
 
-  if (this.data && this.data.extra && this.data.extra.hasOwnProperty("operations")) {
-    result += " - operations executed: " + this.data.extra.operations.executed;
+  var result = "[object ArangoQueryCursor";
+
+  if (this.data.id) {
+    result += " " + this.data.id;
   }
-  else {
-    result += " - count: " + this._count + ", hasMore: " + (this._hasMore ? "true" : "false");
+
+  if (this._count !== null && this._count !== undefined) {
+    result += ", count: " + this._count;
   }
+
+  result += ", hasMore: " + (this.hasNext() ? "true" : "false");
 
   result += "]";
+
+  if (rows.length > 0) {
+    internal.startCaptureMode();
+    internal.print(rows);
+    result += "\n\n" + internal.stopCaptureMode();
+    if (this.hasNext()) {
+      result += "\ntype 'more' to show more documents\n";
+      more = this; // assign cursor to global variable more!
+    }
+  }
 
   return result;
 };
@@ -85588,12 +86766,11 @@ ArangoQueryCursor.prototype.toString = function () {
 /// server. Calling this function will also fully exhaust the cursor.
 ////////////////////////////////////////////////////////////////////////////////
 
-ArangoQueryCursor.prototype.toArray =
-ArangoQueryCursor.prototype.elements = function () {
+ArangoQueryCursor.prototype.toArray = function () {
   var result = [];
 
   while (this.hasNext()) {
-    result.push( this.next() );
+    result.push(this.next());
   }
 
   return result;
@@ -85745,7 +86922,6 @@ ArangoQueryCursor.prototype._baseurl = function () {
 
 module.define("org/arangodb/arango-statement-common", function(exports, module) {
 /*jshint strict: false */
-/*global exports */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief Arango statements
@@ -85985,7 +87161,6 @@ exports.ArangoStatement = ArangoStatement;
 
 module.define("org/arangodb/arango-statement", function(exports, module) {
 /*jshint strict: false */
-/*global require, exports */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief ArangoStatement
@@ -86189,7 +87364,6 @@ exports.ArangoStatement = ArangoStatement;
 
 module.define("org/arangodb/arangosh", function(exports, module) {
 /*jshint strict: false */
-/*global require, exports */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief ArangoShell client API
@@ -86380,7 +87554,7 @@ exports.helpExtended = exports.createHelpHeadline("More help") +
 
 module.define("org/arangodb/general-graph", function(exports, module) {
 /*jshint strict: false */
-/*global require, exports, ArangoClusterComm */
+/*global ArangoClusterComm */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief Graph functionality
@@ -88213,12 +89387,8 @@ var createHiddenProperty = function(obj, name, value) {
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief helper for updating binded collections
 ////////////////////////////////////////////////////////////////////////////////
-var removeEdge = function (edgeId, options, self) {
-  options = options || {};
-  var edgeCollection = edgeId.split("/")[0];
-  var graphs = getGraphCollection().toArray();
-  self.__idsToRemove.push(edgeId);
-  self.__collectionsToLock.push(edgeCollection);
+var removeEdge = function (graphs, edgeCollection, edgeId, self) {
+  self.__idsToRemove[edgeId] = 1;
   graphs.forEach(
     function(graph) {
       var edgeDefinitions = graph.edgeDefinitions;
@@ -88231,24 +89401,20 @@ var removeEdge = function (edgeId, options, self) {
             // if collection of edge to be deleted is in from or to
             if (from.indexOf(edgeCollection) !== -1 || to.indexOf(edgeCollection) !== -1) {
               //search all edges of the graph
-              var edges = db[collection].toArray();
-              edges.forEach(
-                function (edge) {
-                  // if from is
-                  if(self.__idsToRemove.indexOf(edge._id) === -1) {
-                    if (edge._from === edgeId || edge._to === edgeId) {
-                      removeEdge(edge._id, options, self);
-                    }
-                  }
+              var edges = db._collection(collection).edges(edgeId);
+              edges.forEach(function(edge) {
+                // if from is
+                if(! self.__idsToRemove.hasOwnProperty(edge._id)) {
+                  self.__collectionsToLock[collection] = 1;
+                  removeEdge(graphs, collection, edge._id, self);
                 }
-              );
+              });
             }
           }
         );
       }
     }
   );
-  return;
 };
 
 var bindEdgeCollections = function(self, edgeCollections) {
@@ -88295,12 +89461,15 @@ var bindEdgeCollections = function(self, edgeCollections) {
       if (edgeId.indexOf("/") === -1) {
         edgeId = key + "/" + edgeId;
       }
-      removeEdge(edgeId, options, self);
+      var graphs = getGraphCollection().toArray();
+      var edgeCollection = edgeId.split("/")[0];
+      self.__collectionsToLock[edgeCollection] = 1;
+      removeEdge(graphs, edgeCollection, edgeId, self);
 
       try {
         db._executeTransaction({
           collections: {
-            write: self.__collectionsToLock
+            write: Object.keys(self.__collectionsToLock)
           },
           embed: true,
           action: function (params) {
@@ -88316,17 +89485,17 @@ var bindEdgeCollections = function(self, edgeCollections) {
             );
           },
           params: {
-            ids: self.__idsToRemove,
+            ids: Object.keys(self.__idsToRemove),
             options: options
           }
         });
       } catch (e) {
-        self.__idsToRemove = [];
-        self.__collectionsToLock = [];
+        self.__idsToRemove = {};
+        self.__collectionsToLock = {};
         throw e;
       }
-      self.__idsToRemove = [];
-      self.__collectionsToLock = [];
+      self.__idsToRemove = {};
+      self.__collectionsToLock = {};
 
       return true;
     };
@@ -88346,7 +89515,7 @@ var bindVertexCollections = function(self, vertexCollections) {
       if (vertexId.indexOf("/") === -1) {
         vertexId = key + "/" + vertexId;
       }
-      self.__collectionsToLock.push(vertexCollectionName);
+      self.__collectionsToLock[vertexCollectionName] = 1;
       graphs.forEach(
         function(graph) {
           var edgeDefinitions = graph.edgeDefinitions;
@@ -88359,14 +89528,13 @@ var bindVertexCollections = function(self, vertexCollections) {
                 if (from.indexOf(vertexCollectionName) !== -1
                   || to.indexOf(vertexCollectionName) !== -1
                   ) {
-                  var edges = db._collection(collection).toArray();
-                  edges.forEach(
-                    function(edge) {
-                      if (edge._from === vertexId || edge._to === vertexId) {
-                        removeEdge(edge._id, options, self);
-                      }
-                    }
-                  );
+                  var edges = db._collection(collection).edges(vertexId);
+                  if (edges.length > 0) {
+                    self.__collectionsToLock[collection] = 1;
+                    edges.forEach(function(edge) {
+                      removeEdge(graphs, collection, edge._id, self);
+                    });
+                  }
                 }
               }
             );
@@ -88377,7 +89545,7 @@ var bindVertexCollections = function(self, vertexCollections) {
       try {
         db._executeTransaction({
           collections: {
-            write: self.__collectionsToLock
+            write: Object.keys(self.__collectionsToLock)
           },
           embed: true,
           action: function (params) {
@@ -88398,18 +89566,18 @@ var bindVertexCollections = function(self, vertexCollections) {
             }
           },
           params: {
-            ids: self.__idsToRemove,
+            ids: Object.keys(self.__idsToRemove),
             options: options,
             vertexId: vertexId
           }
         });
       } catch (e) {
-        self.__idsToRemove = [];
-        self.__collectionsToLock = [];
+        self.__idsToRemove = {};
+        self.__collectionsToLock = {};
         throw e;
       }
-      self.__idsToRemove = [];
-      self.__collectionsToLock = [];
+      self.__idsToRemove = {};
+      self.__collectionsToLock = {};
 
       return true;
     };
@@ -88701,8 +89869,8 @@ var Graph = function(graphName, edgeDefinitions, vertexCollections, edgeCollecti
   createHiddenProperty(this, "__vertexCollections", vertexCollections);
   createHiddenProperty(this, "__edgeCollections", edgeCollections);
   createHiddenProperty(this, "__edgeDefinitions", edgeDefinitions);
-  createHiddenProperty(this, "__idsToRemove", []);
-  createHiddenProperty(this, "__collectionsToLock", []);
+  createHiddenProperty(this, "__idsToRemove", {});
+  createHiddenProperty(this, "__collectionsToLock", {});
   createHiddenProperty(this, "__id", id);
   createHiddenProperty(this, "__rev", revision);
   createHiddenProperty(this, "__orphanCollections", orphanCollections);
@@ -89871,6 +91039,9 @@ Graph.prototype._absoluteEccentricity = function(vertexExample, options) {
     "ex1": ex1
   };
   var result = db._query(query, bindVars).toArray();
+  if (result.length === 1) {
+    return result[0];
+  }
   return result;
 };
 
@@ -89920,6 +91091,9 @@ Graph.prototype._eccentricity = function(options) {
     "options": options
   };
   var result = db._query(query, bindVars).toArray();
+  if (result.length === 1) {
+    return result[0];
+  }
   return result;
 };
 
@@ -90010,6 +91184,9 @@ Graph.prototype._absoluteCloseness = function(vertexExample, options) {
     "ex1": ex1
   };
   var result = db._query(query, bindVars).toArray();
+  if (result.length === 1) {
+    return result[0];
+  }
   return result;
 };
 
@@ -90068,10 +91245,11 @@ Graph.prototype._closeness = function(options) {
     "options": options
   };
   var result = db._query(query, bindVars).toArray();
+  if (result.length === 1) {
+    return result[0];
+  }
   return result;
 };
-
-
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @startDocuBlock JSF_general_graph_absolute_betweenness
@@ -90079,12 +91257,15 @@ Graph.prototype._closeness = function(options) {
 /// [betweenness](http://en.wikipedia.org/wiki/Betweenness_centrality)
 /// of all vertices in the graph.
 ///
-/// `graph._absoluteBetweenness(options)`
+/// `graph._absoluteBetweenness(vertexExample, options)`
 ///
 /// The complexity of the function is described
 /// [here](../Aql/GraphOperations.html#the_complexity_of_the_shortest_path_algorithms).
 ///
 /// @PARAMS
+///
+/// @PARAM{vertexExample, object, optional}
+/// Filter the vertices, see [Definition of examples](#definition_of_examples)
 ///
 /// @PARAM{options, object, optional}
 /// An object defining further options. Can have the following values:
@@ -90127,18 +91308,23 @@ Graph.prototype._closeness = function(options) {
 /// @endDocuBlock
 //
 ////////////////////////////////////////////////////////////////////////////////
-Graph.prototype._absoluteBetweenness = function(options) {
+Graph.prototype._absoluteBetweenness = function(example, options) {
 
   var query = "RETURN"
     + " GRAPH_ABSOLUTE_BETWEENNESS(@graphName"
-    + ',@options'
-    + ')';
+    + ",@example"
+    + ",@options"
+    + ")";
   options = options || {};
   var bindVars = {
+    "example": example,
     "graphName": this.__name,
     "options": options
   };
   var result = db._query(query, bindVars).toArray();
+  if (result.length === 1) {
+    return result[0];
+  }
   return result;
 };
 
@@ -90195,6 +91381,9 @@ Graph.prototype._betweenness = function(options) {
     "options": options
   };
   var result = db._query(query, bindVars).toArray();
+  if (result.length === 1) {
+    return result[0];
+  }
   return result;
 };
 
@@ -90269,6 +91458,9 @@ Graph.prototype._radius = function(options) {
     "options": options
   };
   var result = db._query(query, bindVars).toArray();
+  if (result.length === 1) {
+    return result[0];
+  }
   return result;
 };
 
@@ -90342,6 +91534,9 @@ Graph.prototype._diameter = function(options) {
     "options": options
   };
   var result = db._query(query, bindVars).toArray();
+  if (result.length === 1) {
+    return result[0];
+  }
   return result;
 };
 
@@ -90979,7 +92174,7 @@ exports._undirectedRelation = _undirectedRelation;
 /// Deprecated function (announced 2.3)
 exports._directedRelation = function () {
   return _relation.apply(this, arguments);
-} ;
+};
 exports._relation = _relation;
 exports._graph = _graph;
 exports._edgeDefinitions = _edgeDefinitions;
@@ -91039,7 +92234,6 @@ exports._listObjects = _listObjects;
 
 module.define("org/arangodb/graph-blueprint", function(exports, module) {
 /*jshint strict: false */
-/*global require, exports */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief Graph functionality
@@ -91408,7 +92602,6 @@ require("org/arangodb/graph/algorithms-common");
 
 module.define("org/arangodb/graph-common", function(exports, module) {
 /*jshint strict: false */
-/*global require, exports */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief Graph functionality
@@ -92341,7 +93534,6 @@ exports.Iterator = Iterator;
 
 module.define("org/arangodb/graph", function(exports, module) {
 /*jshint strict: false */
-/*global require, exports */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief Graph functionality
@@ -92396,7 +93588,7 @@ Object.keys(gp).forEach(function (m) {
 });
 
 module.define("org/arangodb/is", function(exports, module) {
-/*global exports */
+'use strict';
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief Check if something is something
@@ -92426,28 +93618,24 @@ module.define("org/arangodb/is", function(exports, module) {
 ////////////////////////////////////////////////////////////////////////////////
 
 // Check if a value is not undefined or null
-var existy = function (x) {
-  "use strict";
+function existy (x) {
   return x !== null && x !== undefined;
-};
+}
 
 // Check if a value is undefined or null
-var notExisty = function (x) {
-  "use strict";
+function notExisty (x) {
   return !existy(x);
-};
+}
 
 // Check if a value is existy and not false
-var truthy = function (x) {
-  "use strict";
+function truthy (x) {
   return (x !== false) && existy(x);
-};
+}
 
 // Check if a value is not truthy
-var falsy = function (x) {
-  "use strict";
+function falsy (x) {
   return !truthy(x);
-};
+}
 
 // is.object, is.noObject, is.array, is.noArray...
 [
@@ -92460,12 +93648,11 @@ var falsy = function (x) {
   'String',
   'RegExp'
 ].forEach(function(type) {
-  "use strict";
-  exports[type.toLowerCase()] = function(obj) {
+  exports[type.toLowerCase()] = function (obj) {
     return Object.prototype.toString.call(obj) === '[object '+type+']';
   };
 
-  exports["no" + type] = function(obj) {
+  exports["no" + type] = function (obj) {
     return Object.prototype.toString.call(obj) !== '[object '+type+']';
   };
 });
@@ -92484,7 +93671,6 @@ module.define("org/arangodb/mimetypes", function(exports, module) {
          vars: true,
          white: true,
          plusplus: true */
-/*global exports */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief auto-generated file generated from mimetypes.dat
@@ -92571,7 +93757,7 @@ exports.extensions = {
 });
 
 module.define("org/arangodb/replication", function(exports, module) {
-/*global require, exports */
+'use strict';
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief Replication management
@@ -92619,8 +93805,6 @@ var applier = { };
 ////////////////////////////////////////////////////////////////////////////////
 
 logger.state = function () {
-  'use strict';
-
   var db = internal.db;
 
   var requestResult = db._connection.GET("/_api/replication/logger-state");
@@ -92634,8 +93818,6 @@ logger.state = function () {
 ////////////////////////////////////////////////////////////////////////////////
 
 applier.start = function (initialTick) {
-  'use strict';
-
   var db = internal.db;
   var append = "";
 
@@ -92654,8 +93836,6 @@ applier.start = function (initialTick) {
 ////////////////////////////////////////////////////////////////////////////////
 
 applier.stop = applier.shutdown = function () {
-  'use strict';
-
   var db = internal.db;
 
   var requestResult = db._connection.PUT("/_api/replication/applier-stop", "");
@@ -92669,8 +93849,6 @@ applier.stop = applier.shutdown = function () {
 ////////////////////////////////////////////////////////////////////////////////
 
 applier.state = function () {
-  'use strict';
-
   var db = internal.db;
 
   var requestResult = db._connection.GET("/_api/replication/applier-state");
@@ -92684,8 +93862,6 @@ applier.state = function () {
 ////////////////////////////////////////////////////////////////////////////////
 
 applier.forget = function () {
-  'use strict';
-
   var db = internal.db;
 
   var requestResult = db._connection.DELETE("/_api/replication/applier-state");
@@ -92699,8 +93875,6 @@ applier.forget = function () {
 ////////////////////////////////////////////////////////////////////////////////
 
 applier.properties = function (config) {
-  'use strict';
-
   var db = internal.db;
 
   var requestResult;
@@ -92726,8 +93900,6 @@ applier.properties = function (config) {
 ////////////////////////////////////////////////////////////////////////////////
 
 var sync = function (config) {
-  'use strict';
-
   var db = internal.db;
 
   var body = JSON.stringify(config || { });
@@ -92743,8 +93915,6 @@ var sync = function (config) {
 ////////////////////////////////////////////////////////////////////////////////
 
 var serverId = function () {
-  'use strict';
-
   var db = internal.db;
 
   var requestResult = db._connection.GET("/_api/replication/server-id");
@@ -92776,7 +93946,6 @@ exports.serverId = serverId;
 
 module.define("org/arangodb/simple-query-common", function(exports, module) {
 /*jshint strict: false */
-/*global require, exports */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief Arango Simple Query Language
@@ -94106,7 +95275,7 @@ SimpleQueryWithinRectangle.prototype._PRINT = function (context) {
        + ", "
        + this._longitude1
        + ", "
-       + this._latitude1
+       + this._latitude2
        + ", "
        + this._longitude2
        + ", "
@@ -94244,7 +95413,6 @@ exports.SimpleQueryFulltext = SimpleQueryFulltext;
 
 module.define("org/arangodb/simple-query", function(exports, module) {
 /*jshint strict: false */
-/*global require, exports */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief Arango Simple Query Language
@@ -94767,7 +95935,6 @@ exports.SimpleQueryWithinRectangle = SimpleQueryWithinRectangle;
 
 module.define("org/arangodb/tutorial", function(exports, module) {
 /*jshint strict: false */
-/*global require, exports */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief Shell tutorial
@@ -94975,7 +96142,7 @@ exports._PRINT = function (context) {
 });
 
 module.define("org/arangodb-common", function(exports, module) {
-/*global require, module, exports */
+'use strict';
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief JavaScript base module
@@ -95022,17 +96189,10 @@ var mimetypes = require("org/arangodb/mimetypes").mimeTypes;
 /// @brief errors
 ////////////////////////////////////////////////////////////////////////////////
 
-(function () {
-  'use strict';
 
-  var name;
-
-  for (name in internal.errors) {
-    if (internal.errors.hasOwnProperty(name)) {
-      exports[name] = internal.errors[name].code;
-    }
-  }
-}());
+Object.keys(internal.errors).forEach(function (key) {
+  exports[key] = internal.errors[key].code;
+});
 
 exports.errors = internal.errors;
 
@@ -95055,8 +96215,6 @@ exports.ArangoError = internal.ArangoError;
 ////////////////////////////////////////////////////////////////////////////////
 
 exports.defineModule = function (path, file) {
-  'use strict';
-
   var content;
   var m;
   var mc;
@@ -95085,8 +96243,6 @@ exports.defineModule = function (path, file) {
 ////////////////////////////////////////////////////////////////////////////////
 
 exports.guessContentType = function (filename, defaultValue) {
-  'use strict';
-
   var re = /\.([a-zA-Z0-9]+)$/;
   var match = re.exec(filename);
 
@@ -95125,8 +96281,6 @@ exports.guessContentType = function (filename, defaultValue) {
 ////////////////////////////////////////////////////////////////////////////////
 
 exports.normalizeURL = function (path) {
-  'use strict';
-
   var i;
   var n;
   var p;
@@ -95207,8 +96361,6 @@ exports.inspect = internal.inspect;
 ////////////////////////////////////////////////////////////////////////////////
 
 exports.output = function () {
-  'use strict';
-
   internal.output.apply(internal.output, arguments);
 };
 
@@ -95241,8 +96393,6 @@ exports.printObject = internal.printObject;
 ////////////////////////////////////////////////////////////////////////////////
 
 exports.printTable = function  (list, columns, options) {
-  'use strict';
-
   options = options || { };
   if (options.totalString === undefined) {
     options.totalString = "%s document(s)\n";
@@ -95393,8 +96543,6 @@ exports.printTable = function  (list, columns, options) {
 ////////////////////////////////////////////////////////////////////////////////
 
 exports.stringPadding = function (str, len, pad, dir) {
-  'use strict';
-
   // yes, this is more code than new Array(length).join(chr), but it makes jslint happy
   function fill (length, chr) {
     var result = '', i;
@@ -95441,8 +96589,6 @@ exports.stringPadding = function (str, len, pad, dir) {
 ////////////////////////////////////////////////////////////////////////////////
 
 exports.throwDownloadError = function (msg) {
-  'use strict';
-
   throw new exports.ArangoError({
     errorNum: exports.errors.ERROR_APPLICATION_DOWNLOAD_FAILED.code,
     errorMessage: exports.errors.ERROR_APPLICATION_DOWNLOAD_FAILED.message + ': ' + String(msg)
@@ -95454,8 +96600,6 @@ exports.throwDownloadError = function (msg) {
 ////////////////////////////////////////////////////////////////////////////////
 
 exports.throwFileNotFound = function (msg) {
-  'use strict';
-
   throw new exports.ArangoError({
     errorNum: exports.errors.ERROR_FILE_NOT_FOUND.code,
     errorMessage: exports.errors.ERROR_FILE_NOT_FOUND.message + ': ' + String(msg)
@@ -95467,8 +96611,6 @@ exports.throwFileNotFound = function (msg) {
 ////////////////////////////////////////////////////////////////////////////////
 
 exports.throwBadParameter = function (msg) {
-  'use strict';
-
   throw new exports.ArangoError({
     errorNum: exports.errors.ERROR_BAD_PARAMETER.code,
     errorMessage: exports.errors.ERROR_BAD_PARAMETER.message + ': ' + String(msg)
@@ -95480,8 +96622,6 @@ exports.throwBadParameter = function (msg) {
 ////////////////////////////////////////////////////////////////////////////////
 
 exports.checkParameter = function (usage, descs, vars) {
-  'use strict';
-
   var i;
 
   for (i = 0;  i < descs.length;  ++i) {
@@ -95509,7 +96649,7 @@ exports.checkParameter = function (usage, descs, vars) {
 });
 
 module.define("org/arangodb", function(exports, module) {
-/*global require, exports */
+'use strict';
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief JavaScript base module
@@ -95541,13 +96681,9 @@ module.define("org/arangodb", function(exports, module) {
 var internal = require("internal");
 var common = require("org/arangodb-common");
 
-var key;
-
-for (key in common) {
-  if (common.hasOwnProperty(key)) {
-    exports[key] = common[key];
-  }
-}
+Object.keys(common).forEach(function (key) {
+  exports[key] = common[key];
+});
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                                    MODULE EXPORTS
@@ -95671,7 +96807,7 @@ if (typeof internal.arango !== 'undefined') {
     "ERROR_ARANGO_DATAFILE_EMPTY"  : { "code" : 1007, "message" : "datafile empty" },
     "ERROR_ARANGO_RECOVERY"        : { "code" : 1008, "message" : "logfile recovery error" },
     "ERROR_ARANGO_CORRUPTED_DATAFILE" : { "code" : 1100, "message" : "corrupted datafile" },
-    "ERROR_ARANGO_ILLEGAL_PARAMETER_FILE" : { "code" : 1101, "message" : "illegal parameter file" },
+    "ERROR_ARANGO_ILLEGAL_PARAMETER_FILE" : { "code" : 1101, "message" : "illegal or unreadable parameter file" },
     "ERROR_ARANGO_CORRUPTED_COLLECTION" : { "code" : 1102, "message" : "corrupted collection" },
     "ERROR_ARANGO_MMAP_FAILED"     : { "code" : 1103, "message" : "mmap failed" },
     "ERROR_ARANGO_FILESYSTEM_FULL" : { "code" : 1104, "message" : "filesystem full" },
@@ -95794,6 +96930,7 @@ if (typeof internal.arango !== 'undefined') {
     "ERROR_QUERY_EXCEPTION_OPTIONS" : { "code" : 1576, "message" : "query options expected" },
     "ERROR_QUERY_COLLECTION_USED_IN_EXPRESSION" : { "code" : 1577, "message" : "collection '%s' used as expression operand" },
     "ERROR_QUERY_DISALLOWED_DYNAMIC_CALL" : { "code" : 1578, "message" : "disallowed dynamic call to '%s'" },
+    "ERROR_QUERY_ACCESS_AFTER_MODIFICATION" : { "code" : 1579, "message" : "access after data-modification" },
     "ERROR_QUERY_FUNCTION_INVALID_NAME" : { "code" : 1580, "message" : "invalid user function name" },
     "ERROR_QUERY_FUNCTION_INVALID_CODE" : { "code" : 1581, "message" : "invalid user function code" },
     "ERROR_QUERY_FUNCTION_NOT_FOUND" : { "code" : 1582, "message" : "user function '%s()' not found" },
@@ -95802,6 +96939,7 @@ if (typeof internal.arango !== 'undefined') {
     "ERROR_QUERY_NOT_FOUND"        : { "code" : 1591, "message" : "query ID not found" },
     "ERROR_QUERY_IN_USE"           : { "code" : 1592, "message" : "query with this ID is in use" },
     "ERROR_CURSOR_NOT_FOUND"       : { "code" : 1600, "message" : "cursor not found" },
+    "ERROR_CURSOR_BUSY"            : { "code" : 1601, "message" : "cursor is busy" },
     "ERROR_TRANSACTION_INTERNAL"   : { "code" : 1650, "message" : "internal transaction error" },
     "ERROR_TRANSACTION_NESTED"     : { "code" : 1651, "message" : "nested transactions detected" },
     "ERROR_TRANSACTION_UNREGISTERED_COLLECTION" : { "code" : 1652, "message" : "unregistered collection used in transaction" },
@@ -95872,6 +97010,19 @@ if (typeof internal.arango !== 'undefined') {
     "ERROR_NO_FOXX_FOUND"          : { "code" : 3008, "message" : "No foxx found at this location" },
     "ERROR_APP_NOT_FOUND"          : { "code" : 3009, "message" : "App not found" },
     "ERROR_APP_NEEDS_CONFIGURATION" : { "code" : 3010, "message" : "App not configured" },
+    "ERROR_MODULE_NOT_FOUND"       : { "code" : 3100, "message" : "cannot locate module" },
+    "ERROR_MODULE_SYNTAX_ERROR"    : { "code" : 3101, "message" : "syntax error in module" },
+    "ERROR_MODULE_BAD_WRAPPER"     : { "code" : 3102, "message" : "failed to wrap module" },
+    "ERROR_MODULE_FAILURE"         : { "code" : 3103, "message" : "failed to invoke module" },
+    "ERROR_MODULE_UNKNOWN_FILE_TYPE" : { "code" : 3110, "message" : "unknown file type" },
+    "ERROR_MODULE_PATH_MUST_BE_ABSOLUTE" : { "code" : 3111, "message" : "path must be absolute" },
+    "ERROR_MODULE_CAN_NOT_ESCAPE"  : { "code" : 3112, "message" : "cannot use '..' to escape top-level-directory" },
+    "ERROR_MODULE_DRIVE_LETTER"    : { "code" : 3113, "message" : "drive local path is not supported" },
+    "ERROR_MODULE_BAD_MODULE_ORIGIN" : { "code" : 3120, "message" : "corrupted module origin" },
+    "ERROR_MODULE_BAD_PACKAGE_ORIGIN" : { "code" : 3121, "message" : "corrupted package origin" },
+    "ERROR_MODULE_DOCUMENT_IS_EMPTY" : { "code" : 3125, "message" : "no content" },
+    "ERROR_MODULE_MAIN_NOT_READABLE" : { "code" : 3130, "message" : "cannot read main file" },
+    "ERROR_MODULE_MAIN_NOT_JS"     : { "code" : 3131, "message" : "main file is not of type 'js'" },
     "RESULT_ELEMENT_EXISTS"        : { "code" : 10000, "message" : "element not inserted into structure, because it already exists" },
     "RESULT_ELEMENT_NOT_FOUND"     : { "code" : 10001, "message" : "element not found in structure" },
     "ERROR_APP_ALREADY_EXISTS"     : { "code" : 20000, "message" : "newest version of app already installed" },
@@ -95883,7 +97034,7 @@ if (typeof internal.arango !== 'undefined') {
 }());
 
 
-/*jshint strict: false */
+'use strict';
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief monkey-patches to built-in prototypes
@@ -95913,6 +97064,8 @@ if (typeof internal.arango !== 'undefined') {
 /// @author Copyright 2011-2013, triAGENS GmbH, Cologne, Germany
 ////////////////////////////////////////////////////////////////////////////////
 
+(function () {
+
 // -----------------------------------------------------------------------------
 // --SECTION--                                                    monkey-patches
 // -----------------------------------------------------------------------------
@@ -95927,10 +97080,9 @@ if (typeof internal.arango !== 'undefined') {
 
 Object.defineProperty(Object.prototype, "_shallowCopy", {
   get: function () {
-    var that = this;
-
-    return this.propertyKeys.reduce(function (previous, element) {
-      previous[element] = that[element];
+    var self = this;
+    return this.propertyKeys.reduce(function (previous, key) {
+      previous[key] = self[key];
       return previous;
     }, {});
   }
@@ -95942,8 +97094,8 @@ Object.defineProperty(Object.prototype, "_shallowCopy", {
 
 Object.defineProperty(Object.prototype, "propertyKeys", {
   get: function () {
-    return Object.keys(this).filter(function (element) {
-      return (element[0] !== '_' && element[0] !== '$');
+    return Object.keys(this).filter(function (key) {
+      return (key.charAt(0) !== '_' && key.charAt(0) !== '$');
     });
   }
 });
@@ -95952,33 +97104,15 @@ Object.defineProperty(Object.prototype, "propertyKeys", {
 // --SECTION--                                                       END-OF-FILE
 // -----------------------------------------------------------------------------
 
+}());
+
 // Local Variables:
 // mode: outline-minor
 // outline-regexp: "/// @brief\\|/// @addtogroup\\|/// @page\\|// --SECTION--\\|/// @\\}\\|/\\*jslint"
 // End:
 
-/*jshint esnext: true, strict: false, unused: false, -W051: true */
-/*global Symbol, require, module, Module, ArangoError, SleepAndRequeue,
-  CONFIGURE_ENDPOINT, REMOVE_ENDPOINT, LIST_ENDPOINTS, STARTUP_PATH,
-  SYS_BASE64DECODE, SYS_BASE64ENCODE, SYS_DEBUG_SEGFAULT,
-  SYS_DEBUG_CAN_USE_FAILAT, SYS_DEBUG_SET_FAILAT, SYS_DEBUG_REMOVE_FAILAT, SYS_DEBUG_CLEAR_FAILAT,
-  SYS_DOWNLOAD, SYS_EXECUTE, SYS_GET_CURRENT_REQUEST, SYS_GET_CURRENT_RESPONSE,
-  SYS_LOAD, SYS_LOG_LEVEL, SYS_MD5, SYS_OUTPUT, SYS_PROCESS_STATISTICS,
-  SYS_RAND, SYS_SERVER_STATISTICS, SYS_SPRINTF, SYS_TIME, SYS_START_PAGER, SYS_STOP_PAGER,
-  SYS_HMAC, SYS_PBKDF2, SYS_SHA512, SYS_SHA384, SYS_SHA256, SYS_SHA224, SYS_SHA1, SYS_SLEEP, SYS_WAIT,
-  SYS_PARSE, SYS_PARSE_FILE, SYS_IMPORT_CSV_FILE, SYS_IMPORT_JSON_FILE, SYS_LOG,
-  SYS_GEN_RANDOM_NUMBERS, SYS_GEN_RANDOM_ALPHA_NUMBERS, SYS_GEN_RANDOM_SALT, SYS_CREATE_NONCE,
-  SYS_CHECK_AND_MARK_NONCE, SYS_CLIENT_STATISTICS, SYS_HTTP_STATISTICS, SYS_UNIT_TESTS, SYS_UNIT_TESTS_RESULT:true,
-  SYS_PROCESS_CSV_FILE, SYS_PROCESS_JSON_FILE, ARANGO_QUIET, COLORS, COLOR_OUTPUT,
-  COLOR_OUTPUT_RESET, COLOR_BRIGHT, COLOR_BLACK, COLOR_BOLD_BLACK, COLOR_BLINK, COLOR_BLUE,
-  COLOR_BOLD_BLUE, COLOR_BOLD_GREEN, COLOR_RED, COLOR_BOLD_RED, COLOR_GREEN, COLOR_WHITE,
-  COLOR_BOLD_WHITE, COLOR_YELLOW, COLOR_BOLD_YELLOW, COLOR_CYAN, COLOR_BOLD_CYAN, COLOR_MAGENTA,
-  COLOR_BOLD_MAGENTA, PRETTY_PRINT, VALGRIND, COVERAGE, VERSION,
-  BYTES_SENT_DISTRIBUTION, BYTES_RECEIVED_DISTRIBUTION, CONNECTION_TIME_DISTRIBUTION,
-  REQUEST_TIME_DISTRIBUTION, THREAD_NUMBER, LOGFILE_PATH,
-  SYS_PLATFORM, SYS_EXECUTE_EXTERNAL, SYS_STATUS_EXTERNAL, SYS_EXECUTE_EXTERNAL_AND_WAIT, 
-  SYS_KILL_EXTERNAL, SYS_REGISTER_TASK, SYS_UNREGISTER_TASK, SYS_GET_TASK, SYS_TEST_PORT,
-  SYS_IS_IP */
+/*jshint esnext:true, -W051:true */
+'use strict';
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief module "internal"
@@ -96008,9 +97142,8 @@ Object.defineProperty(Object.prototype, "propertyKeys", {
 ////////////////////////////////////////////////////////////////////////////////
 
 (function () {
-  /*jshint strict: false */
 
-  var exports = require("internal");
+var exports = require("internal");
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                                 Module "internal"
@@ -96024,53 +97157,53 @@ Object.defineProperty(Object.prototype, "propertyKeys", {
 /// @brief ArangoError
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof ArangoError !== "undefined") {
-    exports.ArangoError = ArangoError;
-    delete ArangoError;
-  }
-  else {
-    exports.ArangoError = function (error) {
-      if (error !== undefined) {
-        this.error = error.error;
-        this.code = error.code;
-        this.errorNum = error.errorNum;
-        this.errorMessage = error.errorMessage;
-      }
+if (global.ArangoError) {
+  exports.ArangoError = global.ArangoError;
+  delete global.ArangoError;
+}
+else {
+  exports.ArangoError = function (error) {
+    if (error !== undefined) {
+      this.error = error.error;
+      this.code = error.code;
+      this.errorNum = error.errorNum;
+      this.errorMessage = error.errorMessage;
+    }
 
-      this.message = this.toString();
-    };
-
-    exports.ArangoError.prototype = new Error();
-  }
-
-  exports.ArangoError.prototype._PRINT = function (context) {
-    context.output += this.toString();
+    this.message = this.toString();
   };
 
-  exports.ArangoError.prototype.toString = function() {
-    var errorNum = this.errorNum;
-    var errorMessage = this.errorMessage || this.message;
+  exports.ArangoError.prototype = new Error();
+}
 
-    return "[ArangoError " + errorNum + ": " + errorMessage + "]";
-  };
+exports.ArangoError.prototype._PRINT = function (context) {
+  context.output += this.toString();
+};
+
+exports.ArangoError.prototype.toString = function() {
+  var errorNum = this.errorNum;
+  var errorMessage = this.errorMessage || this.message;
+
+  return "[ArangoError " + errorNum + ": " + errorMessage + "]";
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief SleepAndRequeue
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SleepAndRequeue !== "undefined") {
-    exports.SleepAndRequeue = SleepAndRequeue;
-    delete SleepAndRequeue;
+if (global.SleepAndRequeue) {
+  exports.SleepAndRequeue = global.SleepAndRequeue;
+  delete global.SleepAndRequeue;
 
-    exports.SleepAndRequeue.prototype._PRINT = function (context) {
-      context.output += this.toString();
-    };
-
-    exports.SleepAndRequeue.prototype.toString = function() {
-      return "[SleepAndRequeue sleep: " + this.sleep + "]";
+  exports.SleepAndRequeue.prototype._PRINT = function (context) {
+    context.output += this.toString();
   };
 
-  }
+  exports.SleepAndRequeue.prototype.toString = function() {
+    return "[SleepAndRequeue sleep: " + this.sleep + "]";
+};
+
+}
 // -----------------------------------------------------------------------------
 // --SECTION--                                                  public constants
 // -----------------------------------------------------------------------------
@@ -96079,141 +97212,141 @@ Object.defineProperty(Object.prototype, "propertyKeys", {
 /// @brief threadNumber
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.threadNumber = 0;
+exports.threadNumber = 0;
 
-  if (typeof THREAD_NUMBER !== "undefined") {
-    exports.threadNumber = THREAD_NUMBER;
-    delete THREAD_NUMBER;
-  }
+if (global.THREAD_NUMBER) {
+  exports.threadNumber = global.THREAD_NUMBER;
+  delete global.THREAD_NUMBER;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief developmentMode. this is only here for backwards compatibility
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.developmentMode = false;
+exports.developmentMode = false;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief logfilePath
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof LOGFILE_PATH !== "undefined") {
-    exports.logfilePath = LOGFILE_PATH;
-    delete LOGFILE_PATH;
-  }
+if (global.LOGFILE_PATH) {
+  exports.logfilePath = global.LOGFILE_PATH;
+  delete global.LOGFILE_PATH;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief quiet
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.quiet = false;
+exports.quiet = false;
 
-  if (typeof ARANGO_QUIET !== "undefined") {
-    exports.quiet = ARANGO_QUIET;
-    delete ARANGO_QUIET;
-  }
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief valgrind
-////////////////////////////////////////////////////////////////////////////////
-
-  exports.valgrind = false;
-
-  if (typeof VALGRIND !== "undefined") {
-    exports.valgrind = VALGRIND;
-    delete VALGRIND;
-  }
+if (global.ARANGO_QUIET) {
+  exports.quiet = global.ARANGO_QUIET;
+  delete global.ARANGO_QUIET;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief valgrind
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.coverage = false;
+exports.valgrind = false;
 
-  if (typeof COVERAGE !== "undefined") {
-    exports.coverage = COVERAGE;
-    delete COVERAGE;
-  }
+if (global.VALGRIND) {
+  exports.valgrind = global.VALGRIND;
+  delete global.VALGRIND;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// @brief valgrind
+////////////////////////////////////////////////////////////////////////////////
+
+exports.coverage = false;
+
+if (global.COVERAGE) {
+  exports.coverage = global.COVERAGE;
+  delete global.COVERAGE;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief version
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.version = "unknown";
+exports.version = "unknown";
 
-  if (typeof VERSION !== "undefined") {
-    exports.version = VERSION;
-    delete VERSION;
-  }
+if (global.VERSION) {
+  exports.version = global.VERSION;
+  delete global.VERSION;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief platform
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.platform = "unknown";
+exports.platform = "unknown";
 
-  if (typeof SYS_PLATFORM !== "undefined") {
-    exports.platform = SYS_PLATFORM;
-    delete SYS_PLATFORM;
-  }
+if (global.SYS_PLATFORM) {
+  exports.platform = global.SYS_PLATFORM;
+  delete global.SYS_PLATFORM;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief bytesSentDistribution
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.bytesSentDistribution = [];
+exports.bytesSentDistribution = [];
 
-  if (typeof BYTES_SENT_DISTRIBUTION !== "undefined") {
-    exports.bytesSentDistribution = BYTES_SENT_DISTRIBUTION;
-    delete BYTES_SENT_DISTRIBUTION;
-  }
+if (global.BYTES_SENT_DISTRIBUTION) {
+  exports.bytesSentDistribution = global.BYTES_SENT_DISTRIBUTION;
+  delete global.BYTES_SENT_DISTRIBUTION;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief bytesReceivedDistribution
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.bytesReceivedDistribution = [];
+exports.bytesReceivedDistribution = [];
 
-  if (typeof BYTES_RECEIVED_DISTRIBUTION !== "undefined") {
-    exports.bytesReceivedDistribution = BYTES_RECEIVED_DISTRIBUTION;
-    delete BYTES_RECEIVED_DISTRIBUTION;
-  }
+if (global.BYTES_RECEIVED_DISTRIBUTION) {
+  exports.bytesReceivedDistribution = global.BYTES_RECEIVED_DISTRIBUTION;
+  delete global.BYTES_RECEIVED_DISTRIBUTION;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief connectionTimeDistribution
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.connectionTimeDistribution = [];
+exports.connectionTimeDistribution = [];
 
-  if (typeof CONNECTION_TIME_DISTRIBUTION !== "undefined") {
-    exports.connectionTimeDistribution = CONNECTION_TIME_DISTRIBUTION;
-    delete CONNECTION_TIME_DISTRIBUTION;
-  }
+if (global.CONNECTION_TIME_DISTRIBUTION) {
+  exports.connectionTimeDistribution = global.CONNECTION_TIME_DISTRIBUTION;
+  delete global.CONNECTION_TIME_DISTRIBUTION;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief requestTimeDistribution
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.requestTimeDistribution = [];
+exports.requestTimeDistribution = [];
 
-  if (typeof REQUEST_TIME_DISTRIBUTION !== "undefined") {
-    exports.requestTimeDistribution = REQUEST_TIME_DISTRIBUTION;
-    delete REQUEST_TIME_DISTRIBUTION;
-  }
+if (global.REQUEST_TIME_DISTRIBUTION) {
+  exports.requestTimeDistribution = global.REQUEST_TIME_DISTRIBUTION;
+  delete global.REQUEST_TIME_DISTRIBUTION;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief startupPath
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.startupPath = "";
+exports.startupPath = "";
 
-  if (typeof STARTUP_PATH !== "undefined") {
-    exports.startupPath = STARTUP_PATH;
-    delete STARTUP_PATH;
-  }
+if (global.STARTUP_PATH) {
+  exports.startupPath = global.STARTUP_PATH;
+  delete global.STARTUP_PATH;
+}
 
-  if (exports.startupPath === "") {
-    exports.startupPath = ".";
-  }
+if (exports.startupPath === "") {
+  exports.startupPath = ".";
+}
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                                  public functions
@@ -96223,496 +97356,498 @@ Object.defineProperty(Object.prototype, "propertyKeys", {
 /// @brief configureEndpoint
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof CONFIGURE_ENDPOINT !== "undefined") {
-    exports.configureEndpoint = CONFIGURE_ENDPOINT;
-    delete CONFIGURE_ENDPOINT;
-  }
+if (global.CONFIGURE_ENDPOINT) {
+  exports.configureEndpoint = global.CONFIGURE_ENDPOINT;
+  delete global.CONFIGURE_ENDPOINT;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief removeEndpoint
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof REMOVE_ENDPOINT !== "undefined") {
-    exports.removeEndpoint = REMOVE_ENDPOINT;
-    delete REMOVE_ENDPOINT;
-  }
+if (global.REMOVE_ENDPOINT) {
+  exports.removeEndpoint = global.REMOVE_ENDPOINT;
+  delete global.REMOVE_ENDPOINT;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief listEndpoints
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof LIST_ENDPOINTS !== "undefined") {
-    exports.listEndpoints = LIST_ENDPOINTS;
-    delete LIST_ENDPOINTS;
-  }
+if (global.LIST_ENDPOINTS) {
+  exports.listEndpoints = global.LIST_ENDPOINTS;
+  delete global.LIST_ENDPOINTS;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief base64Decode
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_BASE64DECODE !== "undefined") {
-    exports.base64Decode = SYS_BASE64DECODE;
-    delete SYS_BASE64DECODE;
-  }
+if (global.SYS_BASE64DECODE) {
+  exports.base64Decode = global.SYS_BASE64DECODE;
+  delete global.SYS_BASE64DECODE;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief base64Encode
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_BASE64ENCODE !== "undefined") {
-    exports.base64Encode = SYS_BASE64ENCODE;
-    delete SYS_BASE64ENCODE;
-  }
+if (global.SYS_BASE64ENCODE) {
+  exports.base64Encode = global.SYS_BASE64ENCODE;
+  delete global.SYS_BASE64ENCODE;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief debugSegfault
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_DEBUG_SEGFAULT !== "undefined") {
-    exports.debugSegfault = SYS_DEBUG_SEGFAULT;
-    delete SYS_DEBUG_SEGFAULT;
-  }
+if (global.SYS_DEBUG_SEGFAULT) {
+  exports.debugSegfault = global.SYS_DEBUG_SEGFAULT;
+  delete global.SYS_DEBUG_SEGFAULT;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief debugSetFailAt
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_DEBUG_SET_FAILAT !== "undefined") {
-    exports.debugSetFailAt = SYS_DEBUG_SET_FAILAT;
-    delete SYS_DEBUG_SET_FAILAT;
-  }
+if (global.SYS_DEBUG_SET_FAILAT) {
+  exports.debugSetFailAt = global.SYS_DEBUG_SET_FAILAT;
+  delete global.SYS_DEBUG_SET_FAILAT;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief debugRemoveFailAt
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_DEBUG_REMOVE_FAILAT !== "undefined") {
-    exports.debugRemoveFailAt = SYS_DEBUG_REMOVE_FAILAT;
-    delete SYS_DEBUG_REMOVE_FAILAT;
-  }
+if (global.SYS_DEBUG_REMOVE_FAILAT) {
+  exports.debugRemoveFailAt = global.SYS_DEBUG_REMOVE_FAILAT;
+  delete global.SYS_DEBUG_REMOVE_FAILAT;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief debugClearFailAt
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_DEBUG_CLEAR_FAILAT !== "undefined") {
-    exports.debugClearFailAt = SYS_DEBUG_CLEAR_FAILAT;
-    delete SYS_DEBUG_CLEAR_FAILAT;
-  }
+if (global.SYS_DEBUG_CLEAR_FAILAT) {
+  exports.debugClearFailAt = global.SYS_DEBUG_CLEAR_FAILAT;
+  delete global.SYS_DEBUG_CLEAR_FAILAT;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief debugCanUseFailAt
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_DEBUG_CAN_USE_FAILAT !== "undefined") {
-    exports.debugCanUseFailAt = SYS_DEBUG_CAN_USE_FAILAT;
-    delete SYS_DEBUG_CAN_USE_FAILAT;
-  }
+if (global.SYS_DEBUG_CAN_USE_FAILAT) {
+  exports.debugCanUseFailAt = global.SYS_DEBUG_CAN_USE_FAILAT;
+  delete global.SYS_DEBUG_CAN_USE_FAILAT;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief download
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_DOWNLOAD !== "undefined") {
-    exports.download = SYS_DOWNLOAD;
-    delete SYS_DOWNLOAD;
-  }
+if (global.SYS_DOWNLOAD) {
+  exports.download = global.SYS_DOWNLOAD;
+  delete global.SYS_DOWNLOAD;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief executeScript
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_EXECUTE !== "undefined") {
-    exports.executeScript = SYS_EXECUTE;
-    delete SYS_EXECUTE;
-  }
+if (global.SYS_EXECUTE) {
+  exports.executeScript = global.SYS_EXECUTE;
+  delete global.SYS_EXECUTE;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief getCurrentRequest
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_GET_CURRENT_REQUEST !== "undefined") {
-    exports.getCurrentRequest = SYS_GET_CURRENT_REQUEST;
-    delete SYS_GET_CURRENT_REQUEST;
-  }
+if (global.SYS_GET_CURRENT_REQUEST) {
+  exports.getCurrentRequest = global.SYS_GET_CURRENT_REQUEST;
+  delete global.SYS_GET_CURRENT_REQUEST;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief getCurrentResponse
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_GET_CURRENT_RESPONSE !== "undefined") {
-    exports.getCurrentResponse = SYS_GET_CURRENT_RESPONSE;
-    delete SYS_GET_CURRENT_RESPONSE;
-  }
+if (global.SYS_GET_CURRENT_RESPONSE) {
+  exports.getCurrentResponse = global.SYS_GET_CURRENT_RESPONSE;
+  delete global.SYS_GET_CURRENT_RESPONSE;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief extend
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.extend = function (target, source) {
-    'use strict';
+exports.extend = function (target, source) {
 
-    Object.getOwnPropertyNames(source)
-      .forEach(function(propName) {
-        Object.defineProperty(target, propName,
-                              Object.getOwnPropertyDescriptor(source, propName));
-      });
+  Object.getOwnPropertyNames(source)
+  .forEach(function(propName) {
+    Object.defineProperty(
+      target,
+      propName,
+      Object.getOwnPropertyDescriptor(source, propName)
+    );
+  });
 
-    return target;
-  };
+  return target;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief load
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_LOAD !== "undefined") {
-    exports.load = SYS_LOAD;
-    delete SYS_LOAD;
-  }
+if (global.SYS_LOAD) {
+  exports.load = global.SYS_LOAD;
+  delete global.SYS_LOAD;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief logLevel
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_LOG_LEVEL !== "undefined") {
-    exports.logLevel = SYS_LOG_LEVEL;
-    delete SYS_LOG_LEVEL;
-  }
+if (global.SYS_LOG_LEVEL) {
+  exports.logLevel = global.SYS_LOG_LEVEL;
+  delete global.SYS_LOG_LEVEL;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief md5
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_MD5 !== "undefined") {
-    exports.md5 = SYS_MD5;
-    delete SYS_MD5;
-  }
+if (global.SYS_MD5) {
+  exports.md5 = global.SYS_MD5;
+  delete global.SYS_MD5;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief genRandomNumbers
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_GEN_RANDOM_NUMBERS !== "undefined") {
-    exports.genRandomNumbers = SYS_GEN_RANDOM_NUMBERS;
-    delete SYS_GEN_RANDOM_NUMBERS;
-  }
+if (global.SYS_GEN_RANDOM_NUMBERS) {
+  exports.genRandomNumbers = global.SYS_GEN_RANDOM_NUMBERS;
+  delete global.SYS_GEN_RANDOM_NUMBERS;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief genRandomAlphaNumbers
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_GEN_RANDOM_ALPHA_NUMBERS !== "undefined") {
-    exports.genRandomAlphaNumbers = SYS_GEN_RANDOM_ALPHA_NUMBERS;
-    delete SYS_GEN_RANDOM_ALPHA_NUMBERS;
-  }
+if (global.SYS_GEN_RANDOM_ALPHA_NUMBERS) {
+  exports.genRandomAlphaNumbers = global.SYS_GEN_RANDOM_ALPHA_NUMBERS;
+  delete global.SYS_GEN_RANDOM_ALPHA_NUMBERS;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief genRandomSalt
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_GEN_RANDOM_SALT !== "undefined") {
-    exports.genRandomSalt = SYS_GEN_RANDOM_SALT;
-    delete SYS_GEN_RANDOM_SALT;
-  }
+if (global.SYS_GEN_RANDOM_SALT) {
+  exports.genRandomSalt = global.SYS_GEN_RANDOM_SALT;
+  delete global.SYS_GEN_RANDOM_SALT;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief hmac
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_HMAC !== "undefined") {
-    exports.hmac = SYS_HMAC;
-    delete SYS_HMAC;
-  }
+if (global.SYS_HMAC) {
+  exports.hmac = global.SYS_HMAC;
+  delete global.SYS_HMAC;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief pbkdf2-hmac
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_PBKDF2 !== "undefined") {
-    exports.pbkdf2 = SYS_PBKDF2;
-    delete SYS_PBKDF2;
-  }
+if (global.SYS_PBKDF2) {
+  exports.pbkdf2 = global.SYS_PBKDF2;
+  delete global.SYS_PBKDF2;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief createNonce
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_CREATE_NONCE !== "undefined") {
-    exports.createNonce = SYS_CREATE_NONCE;
-    delete SYS_CREATE_NONCE;
-  }
+if (global.SYS_CREATE_NONCE) {
+  exports.createNonce = global.SYS_CREATE_NONCE;
+  delete global.SYS_CREATE_NONCE;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief checkAndMarkNonce
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_CHECK_AND_MARK_NONCE !== "undefined") {
-    exports.checkAndMarkNonce = SYS_CHECK_AND_MARK_NONCE;
-    delete SYS_CHECK_AND_MARK_NONCE;
-  }
+if (global.SYS_CHECK_AND_MARK_NONCE) {
+  exports.checkAndMarkNonce = global.SYS_CHECK_AND_MARK_NONCE;
+  delete global.SYS_CHECK_AND_MARK_NONCE;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief output
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_OUTPUT !== "undefined") {
-    exports.stdOutput = SYS_OUTPUT;
-    exports.output = exports.stdOutput;
-    delete SYS_OUTPUT;
-  }
+if (global.SYS_OUTPUT) {
+  exports.stdOutput = global.SYS_OUTPUT;
+  exports.output = exports.stdOutput;
+  delete global.SYS_OUTPUT;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief parse
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_PARSE !== "undefined") {
-    exports.parse = SYS_PARSE;
-    delete SYS_PARSE;
-  }
+if (global.SYS_PARSE) {
+  exports.parse = global.SYS_PARSE;
+  delete global.SYS_PARSE;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief parseFile
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_PARSE_FILE !== "undefined") {
-    exports.parseFile = SYS_PARSE_FILE;
-    delete SYS_PARSE_FILE;
-  }
+if (global.SYS_PARSE_FILE) {
+  exports.parseFile = global.SYS_PARSE_FILE;
+  delete global.SYS_PARSE_FILE;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief processStatistics
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_PROCESS_STATISTICS !== "undefined") {
-    exports.processStatistics = SYS_PROCESS_STATISTICS;
-    delete SYS_PROCESS_STATISTICS;
-  }
+if (global.SYS_PROCESS_STATISTICS) {
+  exports.processStatistics = global.SYS_PROCESS_STATISTICS;
+  delete global.SYS_PROCESS_STATISTICS;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief rand
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_RAND !== "undefined") {
-    exports.rand = SYS_RAND;
-    delete SYS_RAND;
-  }
+if (global.SYS_RAND) {
+  exports.rand = global.SYS_RAND;
+  delete global.SYS_RAND;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief sha512
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_SHA512 !== "undefined") {
-    exports.sha512 = SYS_SHA512;
-    delete SYS_SHA512;
-  }
+if (global.SYS_SHA512) {
+  exports.sha512 = global.SYS_SHA512;
+  delete global.SYS_SHA512;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief sha384
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_SHA384 !== "undefined") {
-    exports.sha384 = SYS_SHA384;
-    delete SYS_SHA384;
-  }
+if (global.SYS_SHA384) {
+  exports.sha384 = global.SYS_SHA384;
+  delete global.SYS_SHA384;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief sha256
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_SHA256 !== "undefined") {
-    exports.sha256 = SYS_SHA256;
-    delete SYS_SHA256;
-  }
+if (global.SYS_SHA256) {
+  exports.sha256 = global.SYS_SHA256;
+  delete global.SYS_SHA256;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief sha224
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_SHA224 !== "undefined") {
-    exports.sha224 = SYS_SHA224;
-    delete SYS_SHA224;
-  }
+if (global.SYS_SHA224) {
+  exports.sha224 = global.SYS_SHA224;
+  delete global.SYS_SHA224;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief sha1
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_SHA1 !== "undefined") {
-    exports.sha1 = SYS_SHA1;
-    delete SYS_SHA1;
-  }
+if (global.SYS_SHA1) {
+  exports.sha1 = global.SYS_SHA1;
+  delete global.SYS_SHA1;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief serverStatistics
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_SERVER_STATISTICS !== "undefined") {
-    exports.serverStatistics = SYS_SERVER_STATISTICS;
-    delete SYS_SERVER_STATISTICS;
-  }
+if (global.SYS_SERVER_STATISTICS) {
+  exports.serverStatistics = global.SYS_SERVER_STATISTICS;
+  delete global.SYS_SERVER_STATISTICS;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief sleep
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_SLEEP !== "undefined") {
-    exports.sleep = SYS_SLEEP;
-    delete SYS_SLEEP;
-  }
+if (global.SYS_SLEEP) {
+  exports.sleep = global.SYS_SLEEP;
+  delete global.SYS_SLEEP;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief time
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_TIME !== "undefined") {
-    exports.time = SYS_TIME;
-    delete SYS_TIME;
-  }
+if (global.SYS_TIME) {
+  exports.time = global.SYS_TIME;
+  delete global.SYS_TIME;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief wait
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_WAIT !== "undefined") {
-    exports.wait = SYS_WAIT;
-    delete SYS_WAIT;
-  }
+if (global.SYS_WAIT) {
+  exports.wait = global.SYS_WAIT;
+  delete global.SYS_WAIT;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief importCsvFile
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_IMPORT_CSV_FILE !== "undefined") {
-    exports.importCsvFile = SYS_IMPORT_CSV_FILE;
-    delete SYS_IMPORT_CSV_FILE;
-  }
+if (global.SYS_IMPORT_CSV_FILE) {
+  exports.importCsvFile = global.SYS_IMPORT_CSV_FILE;
+  delete global.SYS_IMPORT_CSV_FILE;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief importJsonFile
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_IMPORT_JSON_FILE !== "undefined") {
-    exports.importJsonFile = SYS_IMPORT_JSON_FILE;
-    delete SYS_IMPORT_JSON_FILE;
-  }
+if (global.SYS_IMPORT_JSON_FILE) {
+  exports.importJsonFile = global.SYS_IMPORT_JSON_FILE;
+  delete global.SYS_IMPORT_JSON_FILE;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief processCsvFile
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_PROCESS_CSV_FILE !== "undefined") {
-    exports.processCsvFile = SYS_PROCESS_CSV_FILE;
-    delete SYS_PROCESS_CSV_FILE;
-  }
+if (global.SYS_PROCESS_CSV_FILE) {
+  exports.processCsvFile = global.SYS_PROCESS_CSV_FILE;
+  delete global.SYS_PROCESS_CSV_FILE;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief processJsonFile
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_PROCESS_JSON_FILE !== "undefined") {
-    exports.processJsonFile = SYS_PROCESS_JSON_FILE;
-    delete SYS_PROCESS_JSON_FILE;
-  }
+if (global.SYS_PROCESS_JSON_FILE) {
+  exports.processJsonFile = global.SYS_PROCESS_JSON_FILE;
+  delete global.SYS_PROCESS_JSON_FILE;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief clientStatistics
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_CLIENT_STATISTICS !== "undefined") {
-    exports.clientStatistics = SYS_CLIENT_STATISTICS;
-    delete SYS_CLIENT_STATISTICS;
-  }
+if (global.SYS_CLIENT_STATISTICS) {
+  exports.clientStatistics = global.SYS_CLIENT_STATISTICS;
+  delete global.SYS_CLIENT_STATISTICS;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief httpStatistics
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_HTTP_STATISTICS !== "undefined") {
-    exports.httpStatistics = SYS_HTTP_STATISTICS;
-    delete SYS_HTTP_STATISTICS;
-  }
+if (global.SYS_HTTP_STATISTICS) {
+  exports.httpStatistics = global.SYS_HTTP_STATISTICS;
+  delete global.SYS_HTTP_STATISTICS;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief executeExternal
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_EXECUTE_EXTERNAL !== "undefined") {
-    exports.executeExternal = SYS_EXECUTE_EXTERNAL;
-    delete SYS_EXECUTE_EXTERNAL;
-  }
+if (global.SYS_EXECUTE_EXTERNAL) {
+  exports.executeExternal = global.SYS_EXECUTE_EXTERNAL;
+  delete global.SYS_EXECUTE_EXTERNAL;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
-/// @brief executeExternalAndWait - instantly waits for the exit, returns 
-///   joint result.
+/// @brief executeExternalAndWait - instantly waits for the exit, returns
+/// joint result.
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_EXECUTE_EXTERNAL_AND_WAIT !== "undefined") {
-    exports.executeExternalAndWait = SYS_EXECUTE_EXTERNAL_AND_WAIT;
-    delete SYS_EXECUTE_EXTERNAL_AND_WAIT;
-  }
+if (global.SYS_EXECUTE_EXTERNAL_AND_WAIT) {
+  exports.executeExternalAndWait = global.SYS_EXECUTE_EXTERNAL_AND_WAIT;
+  delete global.SYS_EXECUTE_EXTERNAL_AND_WAIT;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief killExternal
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_KILL_EXTERNAL !== "undefined") {
-    exports.killExternal = SYS_KILL_EXTERNAL;
-    delete SYS_KILL_EXTERNAL;
-  }
+if (global.SYS_KILL_EXTERNAL) {
+  exports.killExternal = global.SYS_KILL_EXTERNAL;
+  delete global.SYS_KILL_EXTERNAL;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief statusExternal
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_STATUS_EXTERNAL !== "undefined") {
-    exports.statusExternal = SYS_STATUS_EXTERNAL;
-    delete SYS_STATUS_EXTERNAL;
-  }
+if (global.SYS_STATUS_EXTERNAL) {
+  exports.statusExternal = global.SYS_STATUS_EXTERNAL;
+  delete global.SYS_STATUS_EXTERNAL;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief registerTask
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_REGISTER_TASK !== "undefined") {
-    exports.registerTask = SYS_REGISTER_TASK;
-    delete SYS_REGISTER_TASK;
-  }
+if (global.SYS_REGISTER_TASK) {
+  exports.registerTask = global.SYS_REGISTER_TASK;
+  delete global.SYS_REGISTER_TASK;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief unregisterTask
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_UNREGISTER_TASK !== "undefined") {
-    exports.unregisterTask = SYS_UNREGISTER_TASK;
-    delete SYS_UNREGISTER_TASK;
-  }
+if (global.SYS_UNREGISTER_TASK) {
+  exports.unregisterTask = global.SYS_UNREGISTER_TASK;
+  delete global.SYS_UNREGISTER_TASK;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief getTasks
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_GET_TASK !== "undefined") {
-    exports.getTask = SYS_GET_TASK;
-    delete SYS_GET_TASK;
-  }
+if (global.SYS_GET_TASK) {
+  exports.getTask = global.SYS_GET_TASK;
+  delete global.SYS_GET_TASK;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief testPort
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_TEST_PORT !== "undefined") {
-    exports.testPort = SYS_TEST_PORT;
-    delete SYS_TEST_PORT;
-  }
+if (global.SYS_TEST_PORT) {
+  exports.testPort = global.SYS_TEST_PORT;
+  delete global.SYS_TEST_PORT;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief isIP
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_IS_IP !== "undefined") {
-    exports.isIP = SYS_IS_IP;
-    delete SYS_IS_IP;
-  }
+if (global.SYS_IS_IP) {
+  exports.isIP = global.SYS_IS_IP;
+  delete global.SYS_IS_IP;
+}
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                                 private functions
@@ -96722,20 +97857,17 @@ Object.defineProperty(Object.prototype, "propertyKeys", {
 /// @brief unitTests
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.unitTests = function () {
-    'use strict';
-
-    return SYS_UNIT_TESTS;
-  };
+exports.unitTests = function () {
+  return global.SYS_UNIT_TESTS;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief setUnitTestsResult
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.setUnitTestsResult = function (value) {
-    // do not use strict here
-    SYS_UNIT_TESTS_RESULT = value;
-  };
+exports.setUnitTestsResult = function (value) {
+  global.SYS_UNIT_TESTS_RESULT = value;
+};
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                     Commandline argument handling
@@ -96747,139 +97879,129 @@ Object.defineProperty(Object.prototype, "propertyKeys", {
 ///                      or --opt value
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.toArgv = function (structure, longOptsEqual) {
-    "use strict";
-    if (typeof(longOptsEqual) === 'undefined') {
-      longOptsEqual = false;
-    }
-    var vec = [];
-    for (var key in structure) {
-      if (structure.hasOwnProperty(key)) {
-        if (key === 'commandSwitches') {
-          var multivec = "";
-          for (var i = 0; i < structure[key].length; i ++) {
-            if (structure[key][i].length > 1) {
-              vec.push(structure[key][i]);
-            }
-            else {
-              multivec += structure[key][i];
-            }
-          }
-          if (multivec.length > 0) {
-            vec.push(multivec);
-          }
-        }
-        else if (key === 'flatCommands') {
-          vec = vec.concat(structure[key]);
-        }
-        else {
-          if (longOptsEqual) {
-            vec.push('--' + key + '=' + structure[key]);
+exports.toArgv = function (structure, longOptsEqual) {
+  if (typeof(longOptsEqual) === 'undefined') {
+    longOptsEqual = false;
+  }
+  var vec = [];
+  for (var key in structure) {
+    if (structure.hasOwnProperty(key)) {
+      if (key === 'commandSwitches') {
+        var multivec = "";
+        for (var i = 0; i < structure[key].length; i ++) {
+          if (structure[key][i].length > 1) {
+            vec.push(structure[key][i]);
           }
           else {
-            vec.push('--' + key);
-            vec.push(structure[key]);
+            multivec += structure[key][i];
           }
+        }
+        if (multivec.length > 0) {
+          vec.push(multivec);
+        }
+      }
+      else if (key === 'flatCommands') {
+        vec = vec.concat(structure[key]);
+      }
+      else {
+        if (longOptsEqual) {
+          vec.push('--' + key + '=' + structure[key]);
+        }
+        else {
+          vec.push('--' + key);
+          vec.push(structure[key]);
         }
       }
     }
-    return vec;
-  };
+  }
+  return vec;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief argv to structured
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.parseArgv = function (argv, startOffset) {
-    "use strict";
-
-    function setOption(ret, option, value) {
-      if (option.indexOf(':') > 0) {
-        var n = option.indexOf(':');
-        var topOption = option.slice(0, n);
-        if (! ret.hasOwnProperty(topOption)) {
-          ret[topOption] = {};
-        }
-        setOption(ret[topOption], option.slice(n + 1, option.length), value);
+exports.parseArgv = function (argv, startOffset) {
+  function setOption(ret, option, value) {
+    if (option.indexOf(':') > 0) {
+      var n = option.indexOf(':');
+      var topOption = option.slice(0, n);
+      if (! ret.hasOwnProperty(topOption)) {
+        ret[topOption] = {};
       }
-      else if (argv[i + 1] === 'true') {
-        ret[option] = true;
-      }
-      else if (argv[i + 1] === 'false') {
-        ret[option] = false;
-      }
-      else if (! isNaN(argv[i + 1])) {
-        ret[option] = parseInt(argv[i + 1]);
-      }
-      else {
-        ret[option] = argv[i + 1];
-      }
+      setOption(ret[topOption], option.slice(n + 1, option.length), value);
     }
-    function setSwitch(ret, option) {
-      if (! ret.hasOwnProperty('commandSwitches')) {
-        ret.commandSwitches = [];
-      }
-      ret.commandSwitches.push(option);
+    else if (argv[i + 1] === 'true') {
+      ret[option] = true;
     }
-
-    function setSwitchVec(ret, option) {
-      for (var i = 0; i < option.length; i++) {
-        setSwitch(ret, option[i]);
-      }
+    else if (argv[i + 1] === 'false') {
+      ret[option] = false;
     }
-
-    function setFlatCommand(ret, thisString) {
-      if (! ret.hasOwnProperty('flatCommands')) {
-        ret.flatCommands = [];
-      }
-      ret.flatCommands.push(thisString);
+    else if (! isNaN(argv[i + 1])) {
+      ret[option] = parseInt(argv[i + 1]);
     }
+    else {
+      ret[option] = argv[i + 1];
+    }
+  }
+  function setSwitch(ret, option) {
+    if (! ret.hasOwnProperty('commandSwitches')) {
+      ret.commandSwitches = [];
+    }
+    ret.commandSwitches.push(option);
+  }
 
-    var inFlat = false;
-    var ret = {};
-    for (var i = startOffset; i < argv.length; i++) {
-      var thisString = argv[i];
-      if (! inFlat) {
-        if ((thisString.length > 2) &&
-            (thisString.slice(0,2) === '--')) {
-          var option = thisString.slice(2, thisString.length);
-          if ((argv.length > i) &&
-              (argv[i + 1].slice(0,1) !== '-')) {
-            setOption(ret, option, argv[i + 1]);
-            i++;
-          }
-          else {
-            setSwitch(ret, option);
-          }
-        }
-        else if (thisString === '--') {
-          inFlat = true;
-        }
-        else if ((thisString.length > 1) &&
-                (thisString.slice(0, 1) === '-')) {
-          setSwitchVec(ret, thisString.slice(1, thisString.length));
+  function setSwitchVec(ret, option) {
+    for (var i = 0; i < option.length; i++) {
+      setSwitch(ret, option[i]);
+    }
+  }
+
+  function setFlatCommand(ret, thisString) {
+    if (! ret.hasOwnProperty('flatCommands')) {
+      ret.flatCommands = [];
+    }
+    ret.flatCommands.push(thisString);
+  }
+
+  var inFlat = false;
+  var ret = {};
+  for (var i = startOffset; i < argv.length; i++) {
+    var thisString = argv[i];
+    if (! inFlat) {
+      if ((thisString.length > 2) &&
+          (thisString.slice(0,2) === '--')) {
+        var option = thisString.slice(2, thisString.length);
+        if ((argv.length > i) &&
+            (argv[i + 1].slice(0,1) !== '-')) {
+          setOption(ret, option, argv[i + 1]);
+          i++;
         }
         else {
-          setFlatCommand(ret, thisString);
+          setSwitch(ret, option);
         }
+      }
+      else if (thisString === '--') {
+        inFlat = true;
+      }
+      else if ((thisString.length > 1) &&
+              (thisString.slice(0, 1) === '-')) {
+        setSwitchVec(ret, thisString.slice(1, thisString.length));
       }
       else {
         setFlatCommand(ret, thisString);
       }
     }
-    return ret;
-  };
-
-}());
+    else {
+      setFlatCommand(ret, thisString);
+    }
+  }
+  return ret;
+};
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                                          PRINTING
 // -----------------------------------------------------------------------------
-
-(function () {
-  // cannot use strict here as we are going to delete globals
-
-  var exports = require("internal");
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                         public printing variables
@@ -96889,30 +98011,30 @@ Object.defineProperty(Object.prototype, "propertyKeys", {
 /// @brief COLORS
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.COLORS = {};
+exports.COLORS = {};
 
-  if (typeof COLORS !== "undefined") {
-    exports.COLORS = COLORS;
-    delete COLORS;
-  }
-  else {
-    [ 'COLOR_RED', 'COLOR_BOLD_RED', 'COLOR_GREEN', 'COLOR_BOLD_GREEN',
-      'COLOR_BLUE', 'COLOR_BOLD_BLUE', 'COLOR_YELLOW', 'COLOR_BOLD_YELLOW',
-      'COLOR_WHITE', 'COLOR_BOLD_WHITE', 'COLOR_CYAN', 'COLOR_BOLD_CYAN',
-      'COLOR_MAGENTA', 'COLOR_BOLD_MAGENTA', 'COLOR_BLACK', 'COLOR_BOLD_BLACK',
-      'COLOR_BLINK', 'COLOR_BRIGHT', 'COLOR_RESET' ].forEach(function(color) {
-        exports.COLORS[color] = '';
-      });
-  }
+if (global.COLORS) {
+  exports.COLORS = global.COLORS;
+  delete global.COLORS;
+}
+else {
+  [ 'COLOR_RED', 'COLOR_BOLD_RED', 'COLOR_GREEN', 'COLOR_BOLD_GREEN',
+    'COLOR_BLUE', 'COLOR_BOLD_BLUE', 'COLOR_YELLOW', 'COLOR_BOLD_YELLOW',
+    'COLOR_WHITE', 'COLOR_BOLD_WHITE', 'COLOR_CYAN', 'COLOR_BOLD_CYAN',
+    'COLOR_MAGENTA', 'COLOR_BOLD_MAGENTA', 'COLOR_BLACK', 'COLOR_BOLD_BLACK',
+    'COLOR_BLINK', 'COLOR_BRIGHT', 'COLOR_RESET' ].forEach(function(color) {
+      exports.COLORS[color] = '';
+    });
+}
 
-  exports.COLORS.COLOR_PUNCTUATION = exports.COLORS.COLOR_RESET;
-  exports.COLORS.COLOR_STRING = exports.COLORS.COLOR_BRIGHT;
-  exports.COLORS.COLOR_NUMBER = exports.COLORS.COLOR_BRIGHT;
-  exports.COLORS.COLOR_INDEX = exports.COLORS.COLOR_BRIGHT;
-  exports.COLORS.COLOR_TRUE = exports.COLORS.COLOR_BRIGHT;
-  exports.COLORS.COLOR_FALSE = exports.COLORS.COLOR_BRIGHT;
-  exports.COLORS.COLOR_NULL = exports.COLORS.COLOR_BRIGHT;
-  exports.COLORS.COLOR_UNDEFINED = exports.COLORS.COLOR_BRIGHT;
+exports.COLORS.COLOR_PUNCTUATION = exports.COLORS.COLOR_RESET;
+exports.COLORS.COLOR_STRING = exports.COLORS.COLOR_BRIGHT;
+exports.COLORS.COLOR_NUMBER = exports.COLORS.COLOR_BRIGHT;
+exports.COLORS.COLOR_INDEX = exports.COLORS.COLOR_BRIGHT;
+exports.COLORS.COLOR_TRUE = exports.COLORS.COLOR_BRIGHT;
+exports.COLORS.COLOR_FALSE = exports.COLORS.COLOR_BRIGHT;
+exports.COLORS.COLOR_NULL = exports.COLORS.COLOR_BRIGHT;
+exports.COLORS.COLOR_UNDEFINED = exports.COLORS.COLOR_BRIGHT;
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                        private printing variables
@@ -96922,236 +98044,151 @@ Object.defineProperty(Object.prototype, "propertyKeys", {
 /// @brief quote cache
 ////////////////////////////////////////////////////////////////////////////////
 
-  var characterQuoteCache = {
-    '\b': '\\b', // ASCII 8, Backspace
-    '\t': '\\t', // ASCII 9, Tab
-    '\n': '\\n', // ASCII 10, Newline
-    '\f': '\\f', // ASCII 12, Formfeed
-    '\r': '\\r', // ASCII 13, Carriage Return
-    '\"': '\\"',
-    '\\': '\\\\'
-  };
+var characterQuoteCache = {
+  '\b': '\\b', // ASCII 8, Backspace
+  '\t': '\\t', // ASCII 9, Tab
+  '\n': '\\n', // ASCII 10, Newline
+  '\f': '\\f', // ASCII 12, Formfeed
+  '\r': '\\r', // ASCII 13, Carriage Return
+  '\"': '\\"',
+  '\\': '\\\\'
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief colors
 ////////////////////////////////////////////////////////////////////////////////
 
-  var colors = exports.COLORS;
+var colors = exports.COLORS;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief useColor
 ////////////////////////////////////////////////////////////////////////////////
 
-  var useColor = false;
+var useColor = false;
 
-  if (typeof COLOR_OUTPUT !== "undefined") {
-    useColor = COLOR_OUTPUT;
-    delete COLOR_OUTPUT;
-  }
+if (global.COLOR_OUTPUT) {
+  useColor = global.COLOR_OUTPUT;
+  delete global.COLOR_OUTPUT;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief usePrettyPrint
 ////////////////////////////////////////////////////////////////////////////////
 
-  var usePrettyPrint = false;
+var usePrettyPrint = false;
 
-  if (typeof PRETTY_PRINT !== "undefined") {
-    usePrettyPrint = PRETTY_PRINT;
-    delete PRETTY_PRINT;
-  }
+if (global.PRETTY_PRINT) {
+  usePrettyPrint = global.PRETTY_PRINT;
+  delete global.PRETTY_PRINT;
+}
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                        private printing functions
 // -----------------------------------------------------------------------------
 
-  var printRecursive;
+var printRecursive;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief quotes a single character
 ////////////////////////////////////////////////////////////////////////////////
 
-  function quoteSingleJsonCharacter (c) {
-    'use strict';
+function quoteSingleJsonCharacter (c) {
 
-    if (characterQuoteCache.hasOwnProperty(c)) {
-      return characterQuoteCache[c];
-    }
-
-    var charCode = c.charCodeAt(0);
-    var result;
-
-    if (charCode < 16) {
-      result = '\\u000';
-    }
-    else if (charCode < 256) {
-      result = '\\u00';
-    }
-    else if (charCode < 4096) {
-      result = '\\u0';
-    }
-    else {
-      result = '\\u';
-    }
-
-    result += charCode.toString(16);
-    characterQuoteCache[c] = result;
-
-    return result;
+  if (characterQuoteCache.hasOwnProperty(c)) {
+    return characterQuoteCache[c];
   }
+
+  var charCode = c.charCodeAt(0);
+  var result;
+
+  if (charCode < 16) {
+    result = '\\u000';
+  }
+  else if (charCode < 256) {
+    result = '\\u00';
+  }
+  else if (charCode < 4096) {
+    result = '\\u0';
+  }
+  else {
+    result = '\\u';
+  }
+
+  result += charCode.toString(16);
+  characterQuoteCache[c] = result;
+
+  return result;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief quotes a string character
 ////////////////////////////////////////////////////////////////////////////////
 
-  var quotable = /[\\\"\x00-\x1f]/g;
+var quotable = /[\\\"\x00-\x1f]/g;
 
-  function quoteJsonString (str) {
-    'use strict';
+function quoteJsonString (str) {
 
-    return '"' + str.replace(quotable, quoteSingleJsonCharacter) + '"';
-  }
+  return '"' + str.replace(quotable, quoteSingleJsonCharacter) + '"';
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief prints the ident for pretty printing
 ////////////////////////////////////////////////////////////////////////////////
 
-  function printIndent (context) {
-    'use strict';
+function printIndent (context) {
 
-    var j;
-    var indent = "";
+  var j;
+  var indent = "";
 
-    if (context.prettyPrint) {
-      indent += "\n";
+  if (context.prettyPrint) {
+    indent += "\n";
 
-      for (j = 0; j < context.level; ++j) {
-        indent += "  ";
-      }
+    for (j = 0; j < context.level; ++j) {
+      indent += "  ";
     }
-
-    context.output += indent;
   }
+
+  context.output += indent;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief prints the JSON representation of an array
 ////////////////////////////////////////////////////////////////////////////////
 
-  function printArray (object, context) {
-    'use strict';
+function printArray (object, context) {
 
-    var useColor = context.useColor;
+  var useColor = context.useColor;
 
-    if (object.length === 0) {
-      if (useColor) {
-        context.output += colors.COLOR_PUNCTUATION;
-      }
-
-      context.output += "[ ]";
-
-      if (useColor) {
-        context.output += colors.COLOR_RESET;
-      }
+  if (object.length === 0) {
+    if (useColor) {
+      context.output += colors.COLOR_PUNCTUATION;
     }
-    else {
-      var i;
 
-      if (useColor) {
-        context.output += colors.COLOR_PUNCTUATION;
-      }
+    context.output += "[ ]";
 
-      context.output += "[";
-
-      if (useColor) {
-        context.output += colors.COLOR_RESET;
-      }
-
-      var newLevel = context.level + 1;
-      var sep = " ";
-
-      context.level = newLevel;
-
-      for (i = 0;  i < object.length;  i++) {
-        if (useColor) {
-          context.output += colors.COLOR_PUNCTUATION;
-        }
-
-        context.output += sep;
-
-        if (useColor) {
-          context.output += colors.COLOR_RESET;
-        }
-
-        printIndent(context);
-
-        var path = context.path;
-        context.path += "[" + i + "]";
-
-        printRecursive(object[i], context);
-
-        if (context.emit && context.output.length >= context.emit) {
-          exports.output(context.output);
-          context.output = "";
-        }
-
-        context.path = path;
-        sep = ", ";
-      }
-
-      context.level = newLevel - 1;
-      context.output += " ";
-
-      printIndent(context);
-
-      if (useColor) {
-        context.output += colors.COLOR_PUNCTUATION;
-      }
-
-      context.output += "]";
-
-      if (useColor) {
-        context.output += colors.COLOR_RESET;
-      }
+    if (useColor) {
+      context.output += colors.COLOR_RESET;
     }
   }
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief prints an object
-////////////////////////////////////////////////////////////////////////////////
-
-  function printObject (object, context) {
-    'use strict';
-
-    var useColor = context.useColor;
-    var sep = " ";
+  else {
+    var i;
 
     if (useColor) {
       context.output += colors.COLOR_PUNCTUATION;
     }
 
-    context.output += "{";
+    context.output += "[";
 
     if (useColor) {
       context.output += colors.COLOR_RESET;
     }
 
     var newLevel = context.level + 1;
+    var sep = " ";
 
     context.level = newLevel;
 
-    var keys;
-    try {
-      keys = Object.keys(object);
-    }
-    catch (err) {
-      // ES6 proxy objects don't support key enumeration
-      keys = [ ];
-    }
-    var i, n = keys.length;
-
-    for (i = 0; i < n; ++i) {
-      var k = keys[i];
-      var val = object[k];
-
+    for (i = 0;  i < object.length;  i++) {
       if (useColor) {
         context.output += colors.COLOR_PUNCTUATION;
       }
@@ -97164,30 +98201,18 @@ Object.defineProperty(Object.prototype, "propertyKeys", {
 
       printIndent(context);
 
-      if (useColor) {
-        context.output += colors.COLOR_INDEX;
-      }
-
-      context.output += quoteJsonString(k);
-
-      if (useColor) {
-        context.output += colors.COLOR_RESET;
-      }
-
-      context.output += " : ";
-
       var path = context.path;
-      context.path += "[" + k + "]";
+      context.path += "[" + i + "]";
 
-      printRecursive(val, context);
-
-      context.path = path;
-      sep = ", ";
+      printRecursive(object[i], context);
 
       if (context.emit && context.output.length >= context.emit) {
         exports.output(context.output);
         context.output = "";
       }
+
+      context.path = path;
+      sep = ", ";
     }
 
     context.level = newLevel - 1;
@@ -97199,260 +98224,350 @@ Object.defineProperty(Object.prototype, "propertyKeys", {
       context.output += colors.COLOR_PUNCTUATION;
     }
 
-    context.output += "}";
+    context.output += "]";
 
     if (useColor) {
       context.output += colors.COLOR_RESET;
     }
   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// @brief prints an object
+////////////////////////////////////////////////////////////////////////////////
+
+function printObject (object, context) {
+
+  var useColor = context.useColor;
+  var sep = " ";
+
+  if (useColor) {
+    context.output += colors.COLOR_PUNCTUATION;
+  }
+
+  context.output += "{";
+
+  if (useColor) {
+    context.output += colors.COLOR_RESET;
+  }
+
+  var newLevel = context.level + 1;
+
+  context.level = newLevel;
+
+  var keys;
+  try {
+    keys = Object.keys(object);
+  }
+  catch (err) {
+    // ES6 proxy objects don't support key enumeration
+    keys = [ ];
+  }
+  var i, n = keys.length;
+
+  for (i = 0; i < n; ++i) {
+    var k = keys[i];
+    var val = object[k];
+
+    if (useColor) {
+      context.output += colors.COLOR_PUNCTUATION;
+    }
+
+    context.output += sep;
+
+    if (useColor) {
+      context.output += colors.COLOR_RESET;
+    }
+
+    printIndent(context);
+
+    if (useColor) {
+      context.output += colors.COLOR_INDEX;
+    }
+
+    context.output += quoteJsonString(k);
+
+    if (useColor) {
+      context.output += colors.COLOR_RESET;
+    }
+
+    context.output += " : ";
+
+    var path = context.path;
+    context.path += "[" + k + "]";
+
+    printRecursive(val, context);
+
+    context.path = path;
+    sep = ", ";
+
+    if (context.emit && context.output.length >= context.emit) {
+      exports.output(context.output);
+      context.output = "";
+    }
+  }
+
+  context.level = newLevel - 1;
+  context.output += " ";
+
+  printIndent(context);
+
+  if (useColor) {
+    context.output += colors.COLOR_PUNCTUATION;
+  }
+
+  context.output += "}";
+
+  if (useColor) {
+    context.output += colors.COLOR_RESET;
+  }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief prints objects to standard output without a new-line
 ////////////////////////////////////////////////////////////////////////////////
 
-  var funcRE = /function ([^\(]*)?\(\) \{ \[native code\] \}/;
-  var func2RE = /function ([^\(]*)?\((.*)\) \{/;
+var funcRE = /function ([^\(]*)?\(\) \{ \[native code\] \}/;
+var func2RE = /function ([^\(]*)?\((.*)\) \{/;
 
-  exports.printRecursive = printRecursive = function (value, context) {
-    'use strict';
+exports.printRecursive = printRecursive = function (value, context) {
 
-    var useColor = context.useColor;
-    var customInspect = context.customInspect;
-    var useToString = context.useToString;
-    var limitString = context.limitString;
-    var showFunction = context.showFunction;
+  var useColor = context.useColor;
+  var customInspect = context.customInspect;
+  var useToString = context.useToString;
+  var limitString = context.limitString;
+  var showFunction = context.showFunction;
 
-    if (typeof context.seen === "undefined") {
-      context.seen = [];
-      context.names = [];
-    }
+  if (typeof context.seen === "undefined") {
+    context.seen = [];
+    context.names = [];
+  }
 
-    var p = context.seen.indexOf(value);
+  var p = context.seen.indexOf(value);
 
-    if (0 <= p) {
-      context.output += context.names[p];
-    }
-    else {
-      if (value && (value instanceof Object || (typeof value === 'object' && Object.getPrototypeOf(value) === null))) {
-        context.seen.push(value);
-        context.names.push(context.path);
-        if (customInspect && typeof value._PRINT === "function") {
-          value._PRINT(context);
+  if (0 <= p) {
+    context.output += context.names[p];
+  }
+  else {
+    if (value && (value instanceof Object || (typeof value === 'object' && Object.getPrototypeOf(value) === null))) {
+      context.seen.push(value);
+      context.names.push(context.path);
+      if (customInspect && typeof value._PRINT === "function") {
+        value._PRINT(context);
 
-          if (context.emit && context.output.length >= context.emit) {
-            exports.output(context.output);
-            context.output = "";
+        if (context.emit && context.output.length >= context.emit) {
+          exports.output(context.output);
+          context.output = "";
+        }
+      }
+      else if (value instanceof Array) {
+        printArray(value, context);
+      }
+      else if (
+        value.toString === Object.prototype.toString
+        || (typeof value === 'object' && Object.getPrototypeOf(value) === null)
+      ) {
+        var handled = false;
+        try {
+          if (value instanceof Set ||
+              value instanceof Map ||
+              value instanceof WeakSet ||
+              value instanceof WeakMap ||
+              typeof value[Symbol.iterator] === "function") {
+            // ES6 iterators
+            context.output += value.toString();
+            handled = true;
           }
         }
-        else if (value instanceof Array) {
-          printArray(value, context);
+        catch (err) {
+          // ignore any errors thrown above, and simply fall back to normal printing
         }
-        else if (
-          value.toString === Object.prototype.toString
-          || (typeof value === 'object' && Object.getPrototypeOf(value) === null)
-        ) {
-          var handled = false;
-          try {
-            if (value instanceof Set ||
-                value instanceof Map ||
-                value instanceof WeakSet ||
-                value instanceof WeakMap ||
-                typeof value[Symbol.iterator] === "function") {
-              // ES6 iterators
-              context.output += value.toString();
-              handled = true;
-            }
-          }
-          catch (err) {
-            // ignore any errors thrown above, and simply fall back to normal printing
-          }
 
-          if (! handled) {
-            // all other objects
-            printObject(value, context);
-          }
-
-          if (context.emit && context.output.length >= context.emit) {
-            exports.output(context.output);
-            context.output = "";
-          }
+        if (! handled) {
+          // all other objects
+          printObject(value, context);
         }
-        else if (typeof value === "function") {
-          // it's possible that toString() throws, and this looks quite ugly
-          try {
-            var s = value.toString();
 
-            if (0 < context.level && ! showFunction) {
-              var a = s.split("\n");
-              var f = a[0];
+        if (context.emit && context.output.length >= context.emit) {
+          exports.output(context.output);
+          context.output = "";
+        }
+      }
+      else if (typeof value === "function") {
+        // it's possible that toString() throws, and this looks quite ugly
+        try {
+          var s = value.toString();
 
-              var m = funcRE.exec(f);
+          if (0 < context.level && ! showFunction) {
+            var a = s.split("\n");
+            var f = a[0];
 
-              if (m !== null) {
-                if (m[1] === undefined) {
-                  context.output += 'function { [native code] }';
-                }
-                else {
-                  context.output += 'function ' + m[1] + ' { [native code] }';
-                }
+            var m = funcRE.exec(f);
+
+            if (m !== null) {
+              if (m[1] === undefined) {
+                context.output += 'function { [native code] }';
               }
               else {
-                m = func2RE.exec(f);
-
-                if (m !== null) {
-                  if (m[1] === undefined) {
-                    context.output += 'function ' + '(' + m[2] +') { ... }';
-                  }
-                  else {
-                    context.output += 'function ' + m[1] + ' (' + m[2] +') { ... }';
-                  }
-                }
-                else {
-                  f = f.substr(8, f.length - 10).trim();
-                  context.output += '[Function "' + f + '" ...]';
-                }
+                context.output += 'function ' + m[1] + ' { [native code] }';
               }
             }
             else {
-              context.output += s;
+              m = func2RE.exec(f);
+
+              if (m !== null) {
+                if (m[1] === undefined) {
+                  context.output += 'function ' + '(' + m[2] +') { ... }';
+                }
+                else {
+                  context.output += 'function ' + m[1] + ' (' + m[2] +') { ... }';
+                }
+              }
+              else {
+                f = f.substr(8, f.length - 10).trim();
+                context.output += '[Function "' + f + '" ...]';
+              }
             }
           }
-          catch (e1) {
-            exports.stdOutput(String(e1));
-            context.output += "[Function]";
+          else {
+            context.output += s;
           }
         }
-        else if (useToString && typeof value.toString === "function") {
-          try {
-            context.output += value.toString();
-          }
-          catch (e2) {
-            context.output += "[Object ";
-            printObject(value, context);
-            context.output += "]";
-          }
+        catch (e1) {
+          exports.stdOutput(String(e1));
+          context.output += "[Function]";
         }
-        else {
+      }
+      else if (useToString && typeof value.toString === "function") {
+        try {
+          context.output += value.toString();
+        }
+        catch (e2) {
           context.output += "[Object ";
           printObject(value, context);
           context.output += "]";
         }
       }
-      else if (value === undefined) {
-        if (useColor) {
-          context.output += colors.COLOR_UNDEFINED;
-        }
-
-        context.output += "undefined";
-
-        if (useColor) {
-          context.output += colors.COLOR_RESET;
-        }
-      }
-      else if (typeof(value) === "string") {
-        if (useColor) {
-          context.output += colors.COLOR_STRING;
-        }
-
-        if (limitString) {
-          if (limitString < value.length) {
-            value = value.substr(0, limitString) + "...";
-          }
-        }
-
-        context.output += quoteJsonString(value);
-
-        if (useColor) {
-          context.output += colors.COLOR_RESET;
-        }
-      }
-      else if (typeof(value) === "boolean") {
-        if (useColor) {
-          context.output += value ? colors.COLOR_TRUE : colors.COLOR_FALSE;
-        }
-
-        context.output += String(value);
-
-        if (useColor) {
-          context.output += colors.COLOR_RESET;
-        }
-      }
-      else if (typeof(value) === "number") {
-        if (useColor) {
-          context.output += colors.COLOR_NUMBER;
-        }
-
-        context.output += String(value);
-
-        if (useColor) {
-          context.output += colors.COLOR_RESET;
-        }
-      }
-      else if (value === null) {
-        if (useColor) {
-          context.output += colors.COLOR_NULL;
-        }
-
-        context.output += String(value);
-
-        if (useColor) {
-          context.output += colors.COLOR_RESET;
-        }
-      }
-      /* jshint notypeof: true */
-      else if (typeof(value) === "symbol") {
-      /* jshint notypeof: false */
-        // handle ES6 symbols
-        if (useColor) {
-          context.output += colors.COLOR_NULL;
-        }
-
-        context.output += value.toString();
-
-        if (useColor) {
-          context.output += colors.COLOR_RESET;
-        }
-      }
       else {
-        context.output += String(value);
+        context.output += "[Object ";
+        printObject(value, context);
+        context.output += "]";
       }
     }
-  };
+    else if (value === undefined) {
+      if (useColor) {
+        context.output += colors.COLOR_UNDEFINED;
+      }
+
+      context.output += "undefined";
+
+      if (useColor) {
+        context.output += colors.COLOR_RESET;
+      }
+    }
+    else if (typeof(value) === "string") {
+      if (useColor) {
+        context.output += colors.COLOR_STRING;
+      }
+
+      if (limitString) {
+        if (limitString < value.length) {
+          value = value.substr(0, limitString) + "...";
+        }
+      }
+
+      context.output += quoteJsonString(value);
+
+      if (useColor) {
+        context.output += colors.COLOR_RESET;
+      }
+    }
+    else if (typeof(value) === "boolean") {
+      if (useColor) {
+        context.output += value ? colors.COLOR_TRUE : colors.COLOR_FALSE;
+      }
+
+      context.output += String(value);
+
+      if (useColor) {
+        context.output += colors.COLOR_RESET;
+      }
+    }
+    else if (typeof(value) === "number") {
+      if (useColor) {
+        context.output += colors.COLOR_NUMBER;
+      }
+
+      context.output += String(value);
+
+      if (useColor) {
+        context.output += colors.COLOR_RESET;
+      }
+    }
+    else if (value === null) {
+      if (useColor) {
+        context.output += colors.COLOR_NULL;
+      }
+
+      context.output += String(value);
+
+      if (useColor) {
+        context.output += colors.COLOR_RESET;
+      }
+    }
+    /* jshint notypeof: true */
+    else if (typeof(value) === "symbol") {
+    /* jshint notypeof: false */
+      // handle ES6 symbols
+      if (useColor) {
+        context.output += colors.COLOR_NULL;
+      }
+
+      context.output += value.toString();
+
+      if (useColor) {
+        context.output += colors.COLOR_RESET;
+      }
+    }
+    else {
+      context.output += String(value);
+    }
+  }
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief buffers output instead of printing it
 ////////////////////////////////////////////////////////////////////////////////
 
-  function bufferOutput () {
-    'use strict';
+function bufferOutput () {
 
-    var i;
+  var i;
 
-    for (i = 0;  i < arguments.length;  ++i) {
-      var value = arguments[i];
-      var text;
+  for (i = 0;  i < arguments.length;  ++i) {
+    var value = arguments[i];
+    var text;
 
-      if (value === null) {
-        text = "null";
+    if (value === null) {
+      text = "null";
+    }
+    else if (value === undefined) {
+      text = "undefined";
+    }
+    else if (typeof(value) === "object") {
+      try {
+        text = JSON.stringify(value);
       }
-      else if (value === undefined) {
-        text = "undefined";
-      }
-      else if (typeof(value) === "object") {
-        try {
-          text = JSON.stringify(value);
-        }
-        catch (err) {
-          text = String(value);
-        }
-      }
-      else {
+      catch (err) {
         text = String(value);
       }
-
-      exports.outputBuffer += text;
     }
+    else {
+      text = String(value);
+    }
+
+    exports.outputBuffer += text;
   }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief prints all arguments
@@ -97465,44 +98580,43 @@ Object.defineProperty(Object.prototype, "propertyKeys", {
 /// @FN{_PRINT}, then this function is called. A final newline is printed.
 ////////////////////////////////////////////////////////////////////////////////
 
-  function printShell () {
-    'use strict';
+function printShell () {
 
-    var output = exports.output;
-    var i;
+  var output = exports.output;
+  var i;
 
-    for (i = 0;  i < arguments.length;  ++i) {
-      if (0 < i) {
-        output(" ");
-      }
-
-      if (typeof(arguments[i]) === "string") {
-        output(arguments[i]);
-      }
-      else {
-        var context = {
-          customInspect: true,
-          emit: 16384,
-          level: 0,
-          limitString: 80,
-          names: [],
-          output: "",
-          path: "~",
-          prettyPrint: usePrettyPrint,
-          seen: [],
-          showFunction: false,
-          useColor: useColor,
-          useToString: true
-        };
-
-        printRecursive(arguments[i], context);
-
-        output(context.output);
-      }
+  for (i = 0;  i < arguments.length;  ++i) {
+    if (0 < i) {
+      output(" ");
     }
 
-    output("\n");
+    if (typeof(arguments[i]) === "string") {
+      output(arguments[i]);
+    }
+    else {
+      var context = {
+        customInspect: true,
+        emit: 16384,
+        level: 0,
+        limitString: 80,
+        names: [],
+        output: "",
+        path: "~",
+        prettyPrint: usePrettyPrint,
+        seen: [],
+        showFunction: false,
+        useColor: useColor,
+        useToString: true
+      };
+
+      printRecursive(arguments[i], context);
+
+      output(context.output);
+    }
   }
+
+  output("\n");
+}
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                         public printing functions
@@ -97512,297 +98626,280 @@ Object.defineProperty(Object.prototype, "propertyKeys", {
 /// @brief flatten
 ////////////////////////////////////////////////////////////////////////////////
 
-  var hasOwnProperty = Function.prototype.call.bind(Object.prototype.hasOwnProperty);
+var hasOwnProperty = Function.prototype.call.bind(Object.prototype.hasOwnProperty);
 
-  exports.flatten = function (obj, seen) {
-    'use strict';
+exports.flatten = function (obj, seen) {
 
-    if (!obj || (typeof obj !== 'object' && typeof obj !== 'function')) {
-      return obj;
+  if (!obj || (typeof obj !== 'object' && typeof obj !== 'function')) {
+    return obj;
+  }
+
+  if (obj instanceof Date) {
+    return obj.toJSON();
+  }
+
+  if (!seen) {
+    seen = [];
+  }
+
+  var result = Object.create(null),
+    src = obj,
+    keys,
+    i,
+    key,
+    val;
+
+  if (typeof obj === 'function') {
+    result.__exec = String(obj);
+  }
+
+  while (src) {
+    if (
+      seen.indexOf(src) !== -1
+        || (obj.constructor && src === obj.constructor.prototype)
+    ) {
+      break;
     }
-
-    if (obj instanceof Date) {
-      return obj.toJSON();
-    }
-
-    if (!seen) {
-      seen = [];
-    }
-
-    var result = Object.create(null),
-      src = obj,
-      keys,
-      i,
-      key,
-      val;
-
-    if (typeof obj === 'function') {
-      result.__exec = String(obj);
-    }
-
-    while (src) {
-      if (
-        seen.indexOf(src) !== -1
-          || (obj.constructor && src === obj.constructor.prototype)
-      ) {
-        break;
-      }
-      seen.push(src);
-      keys = Object.getOwnPropertyNames(src);
-      for (i = 0; i < keys.length; i++) {
-        key = keys[i];
-        if (typeof src !== 'function' || (
-          key !== 'arguments' && key !== 'caller' && key !== 'callee'
-        )) {
-          if (key.charAt(0) !== '_' && !hasOwnProperty(result, key)) {
-            val = obj[key];
-            if (seen.indexOf(val) !== -1 && (
-              typeof val === 'object' || typeof val === 'function'
-            )) {
-              result[key] = '[Circular]';
-            } else {
-              result[key] = exports.flatten(val, seen);
-            }
+    seen.push(src);
+    keys = Object.getOwnPropertyNames(src);
+    for (i = 0; i < keys.length; i++) {
+      key = keys[i];
+      if (typeof src !== 'function' || (
+        key !== 'arguments' && key !== 'caller' && key !== 'callee'
+      )) {
+        if (key.charAt(0) !== '_' && !hasOwnProperty(result, key)) {
+          val = obj[key];
+          if (seen.indexOf(val) !== -1 && (
+            typeof val === 'object' || typeof val === 'function'
+          )) {
+            result[key] = '[Circular]';
+          } else {
+            result[key] = exports.flatten(val, seen);
           }
         }
       }
-      src = Object.getPrototypeOf(src);
     }
+    src = Object.getPrototypeOf(src);
+  }
 
-    if (obj.constructor && obj.constructor.name) {
-      if (obj instanceof Error && obj.name === Error.name) {
-        result.name = obj.constructor.name;
-      } else if (!hasOwnProperty(result, 'constructor')) {
-        result.constructor = {name: obj.constructor.name};
-      }
+  if (obj.constructor && obj.constructor.name) {
+    if (obj instanceof Error && obj.name === Error.name) {
+      result.name = obj.constructor.name;
+    } else if (!hasOwnProperty(result, 'constructor')) {
+      result.constructor = {name: obj.constructor.name};
     }
+  }
 
-    return result;
-  };
+  return result;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief inspect
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.inspect = function (object, options) {
-    'use strict';
+exports.inspect = function (object, options) {
 
-    var context = {
-      customInspect: options && options.customInspect,
-      emit: false,
-      level: 0,
-      limitString: false,
-      names: [],
-      output: "",
-      prettyPrint: true,
-      path: "~",
-      seen: [],
-      showFunction: true,
-      useColor: false,
-      useToString: false
-    };
-
-    if (options && options.hasOwnProperty("prettyPrint")) {
-      context.prettyPrint = options.prettyPrint;
-    }
-
-    printRecursive(object, context);
-
-    return context.output;
+  var context = {
+    customInspect: options && options.customInspect,
+    emit: false,
+    level: 0,
+    limitString: false,
+    names: [],
+    output: "",
+    prettyPrint: true,
+    path: "~",
+    seen: [],
+    showFunction: true,
+    useColor: false,
+    useToString: false
   };
+
+  if (options && options.hasOwnProperty("prettyPrint")) {
+    context.prettyPrint = options.prettyPrint;
+  }
+
+  printRecursive(object, context);
+
+  return context.output;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief sprintf
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_SPRINTF !== "undefined") {
-    exports.sprintf = SYS_SPRINTF;
-    delete SYS_SPRINTF;
-  }
+if (global.SYS_SPRINTF) {
+  exports.sprintf = global.SYS_SPRINTF;
+  delete global.SYS_SPRINTF;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief printf
 ////////////////////////////////////////////////////////////////////////////////
 
-  var sprintf = exports.sprintf;
+var sprintf = exports.sprintf;
 
-  exports.printf = function () {
-    'use strict';
-
-    exports.output(sprintf.apply(sprintf, arguments));
-  };
+exports.printf = function () {
+  exports.output(sprintf.apply(sprintf, arguments));
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief print
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof exports.printBrowser === "function") {
-    exports.printShell = printShell;
-    exports.print = exports.printBrowser;
-  }
-  else {
-    exports.print = printShell;
-  }
+if (typeof exports.printBrowser === "function") {
+  exports.printShell = printShell;
+  exports.print = exports.printBrowser;
+}
+else {
+  exports.print = printShell;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief printObject
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.printObject = printObject;
+exports.printObject = printObject;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief startCaptureMode
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.startCaptureMode = function () {
-    'use strict';
-
-    exports.outputBuffer = "";
-    exports.output = bufferOutput;
-  };
+exports.startCaptureMode = function () {
+  exports.outputBuffer = "";
+  exports.output = bufferOutput;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief stopCaptureMode
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.stopCaptureMode = function () {
-    'use strict';
+exports.stopCaptureMode = function () {
+  var buffer = exports.outputBuffer;
 
-    var buffer = exports.outputBuffer;
+  exports.outputBuffer = "";
+  exports.output = exports.stdOutput;
 
-    exports.outputBuffer = "";
-    exports.output = exports.stdOutput;
-
-    return buffer;
-  };
+  return buffer;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief startPager
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.startPager = function () {};
+exports.startPager = function () {};
 
-  if (typeof SYS_START_PAGER !== "undefined") {
-    exports.startPager = SYS_START_PAGER;
-    delete SYS_START_PAGER;
-  }
+if (global.SYS_START_PAGER) {
+  exports.startPager = global.SYS_START_PAGER;
+  delete global.SYS_START_PAGER;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief stopPager
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.stopPager = function () {};
+exports.stopPager = function () {};
 
-  if (typeof SYS_STOP_PAGER !== "undefined") {
-    exports.stopPager = SYS_STOP_PAGER;
-    delete SYS_STOP_PAGER;
-  }
+if (global.SYS_STOP_PAGER) {
+  exports.stopPager = global.SYS_STOP_PAGER;
+  delete global.SYS_STOP_PAGER;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief startPrettyPrint
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.startPrettyPrint = function (silent) {
-    'use strict';
+exports.startPrettyPrint = function (silent) {
+  if (! usePrettyPrint && !silent) {
+    exports.print("using pretty printing");
+  }
 
-    if (! usePrettyPrint && ! silent) {
-      exports.print("using pretty printing");
-    }
-
-    usePrettyPrint = true;
-  };
+  usePrettyPrint = true;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief stopPrettyPrint
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.stopPrettyPrint = function (silent) {
-    'use strict';
+exports.stopPrettyPrint = function (silent) {
+  if (usePrettyPrint && !silent) {
+    exports.print("disabled pretty printing");
+  }
 
-    if (usePrettyPrint && ! silent) {
-      exports.print("disabled pretty printing");
-    }
-
-    usePrettyPrint = false;
-  };
+  usePrettyPrint = false;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief startColorPrint
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.startColorPrint = function (color, silent) {
-    'use strict';
-
-    var schemes = {
-      arangodb: {
-        COLOR_PUNCTUATION: exports.COLORS.COLOR_RESET,
-        COLOR_STRING: exports.COLORS.COLOR_BOLD_MAGENTA,
-        COLOR_NUMBER: exports.COLORS.COLOR_BOLD_GREEN,
-        COLOR_INDEX: exports.COLORS.COLOR_BOLD_CYAN,
-        COLOR_TRUE: exports.COLORS.COLOR_BOLD_MAGENTA,
-        COLOR_FALSE: exports.COLORS.COLOR_BOLD_MAGENTA,
-        COLOR_NULL: exports.COLORS.COLOR_BOLD_YELLOW,
-        COLOR_UNDEFINED: exports.COLORS.COLOR_BOLD_YELLOW
-      }
-    };
-
-    if (! useColor && ! silent) {
-      exports.print("starting color printing");
+exports.startColorPrint = function (color, silent) {
+  var schemes = {
+    arangodb: {
+      COLOR_PUNCTUATION: exports.COLORS.COLOR_RESET,
+      COLOR_STRING: exports.COLORS.COLOR_BOLD_MAGENTA,
+      COLOR_NUMBER: exports.COLORS.COLOR_BOLD_GREEN,
+      COLOR_INDEX: exports.COLORS.COLOR_BOLD_CYAN,
+      COLOR_TRUE: exports.COLORS.COLOR_BOLD_MAGENTA,
+      COLOR_FALSE: exports.COLORS.COLOR_BOLD_MAGENTA,
+      COLOR_NULL: exports.COLORS.COLOR_BOLD_YELLOW,
+      COLOR_UNDEFINED: exports.COLORS.COLOR_BOLD_YELLOW
     }
-
-    if (color === undefined || color === null) {
-      color = null;
-    }
-    else if (typeof color === "string") {
-      var c;
-
-      color = color.toLowerCase();
-
-      if (schemes.hasOwnProperty(color)) {
-        colors = schemes[color];
-
-        for (c in exports.COLORS) {
-          if (exports.COLORS.hasOwnProperty(c) && ! colors.hasOwnProperty(c)) {
-            colors[c] = exports.COLORS[c];
-          }
-        }
-      }
-      else {
-        colors = exports.COLORS;
-
-        var setColor = function (key) {
-          [ 'COLOR_STRING', 'COLOR_NUMBER', 'COLOR_INDEX', 'COLOR_TRUE',
-            'COLOR_FALSE', 'COLOR_NULL', 'COLOR_UNDEFINED' ].forEach(function (what) {
-            colors[what] = exports.COLORS[key];
-          });
-        };
-
-        for (c in exports.COLORS) {
-          if (exports.COLORS.hasOwnProperty(c) &&
-              c.replace(/^COLOR_/, '').toLowerCase() === color) {
-            setColor(c);
-            break;
-          }
-        }
-      }
-    }
-
-    useColor = true;
   };
+
+  if (!useColor && !silent) {
+    exports.print("starting color printing");
+  }
+
+  if (color === undefined || color === null) {
+    color = null;
+  }
+  else if (typeof color === "string") {
+    color = color.toLowerCase();
+    var c;
+
+    if (schemes.hasOwnProperty(color)) {
+      colors = schemes[color];
+
+      for (c in exports.COLORS) {
+        if (exports.COLORS.hasOwnProperty(c) && ! colors.hasOwnProperty(c)) {
+          colors[c] = exports.COLORS[c];
+        }
+      }
+    }
+    else {
+      colors = exports.COLORS;
+
+      var setColor = function (key) {
+        [ 'COLOR_STRING', 'COLOR_NUMBER', 'COLOR_INDEX', 'COLOR_TRUE',
+          'COLOR_FALSE', 'COLOR_NULL', 'COLOR_UNDEFINED' ].forEach(function (what) {
+          colors[what] = exports.COLORS[key];
+        });
+      };
+
+      for (c in exports.COLORS) {
+        if (exports.COLORS.hasOwnProperty(c) &&
+            c.replace(/^COLOR_/, '').toLowerCase() === color) {
+          setColor(c);
+          break;
+        }
+      }
+    }
+  }
+
+  useColor = true;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief stopColorPrint
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.stopColorPrint = function (silent) {
-    'use strict';
+exports.stopColorPrint = function (silent) {
+  if (useColor && !silent) {
+    exports.print("disabled color printing");
+  }
 
-    if (useColor && ! silent) {
-      exports.print("disabled color printing");
-    }
-
-    useColor = false;
-  };
+  useColor = false;
+};
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                          public utility functions
@@ -97812,21 +98909,36 @@ Object.defineProperty(Object.prototype, "propertyKeys", {
 /// @brief exponentialBackoff
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.exponentialBackOff = function (n, i) {
-    'use strict';
-    if (i === 0) {
-      return 0;
-    }
-    if (n === 0) {
-      return 0;
-    }
-    if (n === 1) {
-      return Math.random() < 0.5 ? 0 : i;
-    }
-    return Math.floor(Math.random() * (n + 1)) * i;
-  };
+exports.exponentialBackOff = function (n, i) {
+  if (i === 0) {
+    return 0;
+  }
+  if (n === 0) {
+    return 0;
+  }
+  if (n === 1) {
+    return Math.random() < 0.5 ? 0 : i;
+  }
+  return Math.floor(Math.random() * (n + 1)) * i;
+};
 
-}());
+////////////////////////////////////////////////////////////////////////////////
+/// @brief env
+////////////////////////////////////////////////////////////////////////////////
+
+if (typeof ENV !== 'undefined') {
+  exports.env = new global.ENV();
+  delete global.ENV;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// @brief options
+////////////////////////////////////////////////////////////////////////////////
+
+if (typeof SYS_OPTIONS !== 'undefined') {
+  exports.options = global.SYS_OPTIONS;
+  delete global.SYS_OPTIONS;
+}
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                         global printing functions
@@ -97836,31 +98948,25 @@ Object.defineProperty(Object.prototype, "propertyKeys", {
 /// @brief print
 ////////////////////////////////////////////////////////////////////////////////
 
-function print () {
-  'use strict';
-
+global.print = function print () {
   var internal = require("internal");
   internal.print.apply(internal.print, arguments);
-}
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief printf
 ////////////////////////////////////////////////////////////////////////////////
 
-function printf () {
-  'use strict';
-
+global.printf = function printf () {
   var internal = require("internal");
   internal.printf.apply(internal.printf, arguments);
-}
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief print_plain
 ////////////////////////////////////////////////////////////////////////////////
 
-function print_plain () {
-  'use strict';
-
+global.print_plain = function print_plain () {
   var output = require("internal").output;
   var printRecursive = require("internal").printRecursive;
   var i;
@@ -97892,47 +98998,41 @@ function print_plain () {
   }
 
   output("\n");
-}
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief start_pretty_print
 ////////////////////////////////////////////////////////////////////////////////
 
-function start_pretty_print () {
-  'use strict';
-
+global.start_pretty_print = function start_pretty_print () {
   require("internal").startPrettyPrint();
-}
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief stop_pretty_print
 ////////////////////////////////////////////////////////////////////////////////
 
-function stop_pretty_print () {
-  'use strict';
-
+global.stop_pretty_print = function stop_pretty_print () {
   require("internal").stopPrettyPrint();
-}
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief start_color_print
 ////////////////////////////////////////////////////////////////////////////////
 
-function start_color_print (color) {
-  'use strict';
-
+global.start_color_print = function start_color_print (color) {
   require("internal").startColorPrint(color, false);
-}
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief stop_color_print
 ////////////////////////////////////////////////////////////////////////////////
 
-function stop_color_print () {
-  'use strict';
-
+global.stop_color_print = function stop_color_print () {
   require("internal").stopColorPrint();
-}
+};
+
+}());
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                                       END-OF-FILE
@@ -97943,8 +99043,8 @@ function stop_color_print () {
 // outline-regexp: "/// @brief\\|/// @addtogroup\\|/// @page\\|// --SECTION--\\|/// @\\}\\|/\\*jslint"
 // End:
 
-/*jshint strict: false, -W051: true */
-/*global require, ArangoConnection, SYS_ARANGO, window */
+/*jshint -W051:true */
+'use strict';
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief module "internal"
@@ -97977,26 +99077,23 @@ function stop_color_print () {
 // --SECTION--                                                 Module "internal"
 // -----------------------------------------------------------------------------
 
-// -----------------------------------------------------------------------------
-// --SECTION--                                                 private variables
-// -----------------------------------------------------------------------------
-
 (function () {
-  var internal = require("internal");
+
+var exports = require("internal");
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief hide global variables
 ////////////////////////////////////////////////////////////////////////////////
 
-    if (typeof ArangoConnection !== "undefined") {
-      internal.ArangoConnection = ArangoConnection;
-      delete ArangoConnection;
-    }
+if (global.ArangoConnection) {
+  exports.ArangoConnection = global.ArangoConnection;
+  delete global.ArangoConnection;
+}
 
-    if (typeof SYS_ARANGO !== "undefined") {
-      internal.arango = SYS_ARANGO;
-      delete SYS_ARANGO;
-    }
+if (global.SYS_ARANGO) {
+  exports.arango = global.SYS_ARANGO;
+  delete global.SYS_ARANGO;
+}
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                                 private functions
@@ -98006,212 +99103,212 @@ function stop_color_print () {
 /// @brief write-ahead log functionality
 ////////////////////////////////////////////////////////////////////////////////
 
-  internal.wal = {
-    flush: function (waitForSync, waitForCollector) {
-      if (typeof internal.arango !== 'undefined') {
-        var wfs = waitForSync ? "true" : "false";
-        var wfc = waitForCollector ? "true" : "false";
-        internal.arango.PUT("/_admin/wal/flush?waitForSync=" + wfs + "&waitForCollector=" + wfc, "");
-        return;
-      }
-
-      throw "not connected";
-    },
-
-    properties: function (value) {
-      if (typeof internal.arango !== 'undefined') {
-        if (value !== undefined) {
-          return internal.arango.PUT("/_admin/wal/properties", JSON.stringify(value));
-        }
-
-        return internal.arango.GET("/_admin/wal/properties", "");
-      }
-
-      throw "not connected";
+exports.wal = {
+  flush: function (waitForSync, waitForCollector) {
+    if (exports.arango) {
+      var wfs = waitForSync ? "true" : "false";
+      var wfc = waitForCollector ? "true" : "false";
+      exports.arango.PUT("/_admin/wal/flush?waitForSync=" + wfs + "&waitForCollector=" + wfc, "");
+      return;
     }
-  };
+
+    throw "not connected";
+  },
+
+  properties: function (value) {
+    if (exports.arango) {
+      if (value !== undefined) {
+        return exports.arango.PUT("/_admin/wal/properties", JSON.stringify(value));
+      }
+
+      return exports.arango.GET("/_admin/wal/properties", "");
+    }
+
+    throw "not connected";
+  }
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief reloads the AQL user functions
 ////////////////////////////////////////////////////////////////////////////////
 
-  internal.reloadAqlFunctions = function () {
-    if (typeof internal.arango !== 'undefined') {
-      internal.arango.POST("/_admin/aql/reload", "");
-      return;
-    }
+exports.reloadAqlFunctions = function () {
+  if (exports.arango) {
+    exports.arango.POST("/_admin/aql/reload", "");
+    return;
+  }
 
-    throw "not connected";
-  };
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief rebuilds the routing cache
-////////////////////////////////////////////////////////////////////////////////
-
-  internal.reloadRouting = function () {
-    if (typeof internal.arango !== 'undefined') {
-      internal.arango.POST("/_admin/routing/reload", "");
-      return;
-    }
-
-    throw "not connected";
-  };
+  throw "not connected";
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief rebuilds the routing cache
 ////////////////////////////////////////////////////////////////////////////////
 
-  internal.routingCache = function () {
-    if (typeof internal.arango !== 'undefined') {
-      return internal.arango.GET("/_admin/routing/routes", "");
+exports.reloadRouting = function () {
+  if (exports.arango) {
+    exports.arango.POST("/_admin/routing/reload", "");
+    return;
+  }
 
-    }
+  throw "not connected";
+};
 
-    throw "not connected";
-  };
+////////////////////////////////////////////////////////////////////////////////
+/// @brief rebuilds the routing cache
+////////////////////////////////////////////////////////////////////////////////
+
+exports.routingCache = function () {
+  if (exports.arango) {
+    return exports.arango.GET("/_admin/routing/routes", "");
+
+  }
+
+  throw "not connected";
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief rebuilds the authentication cache
 ////////////////////////////////////////////////////////////////////////////////
 
-  internal.reloadAuth = function () {
-    if (typeof internal.arango !== 'undefined') {
-      internal.arango.POST("/_admin/auth/reload", "");
-      return;
-    }
+exports.reloadAuth = function () {
+  if (exports.arango) {
+    exports.arango.POST("/_admin/auth/reload", "");
+    return;
+  }
 
-    throw "not connected";
-  };
+  throw "not connected";
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief execute javascript file on the server
 ////////////////////////////////////////////////////////////////////////////////
 
-  internal.executeServer = function (body) {
-    if (typeof internal.arango !== 'undefined') {
-      return internal.arango.POST("/_admin/execute", body);
-    }
+exports.executeServer = function (body) {
+  if (exports.arango) {
+    return exports.arango.POST("/_admin/execute", body);
+  }
 
-    throw "not connected";
-  };
+  throw "not connected";
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief logs a request in curl format
 ////////////////////////////////////////////////////////////////////////////////
 
-  internal.appendCurlRequest = function (appender) {
-    return function (method, url, body, headers) {
-      var response;
-      var curl;
-      var i;
+exports.appendCurlRequest = function (appender) {
+  return function (method, url, body, headers) {
+    var response;
+    var curl;
+    var i;
 
-      if (typeof body !== 'string') {
-        body = internal.inspect(body);
-      }
+    if (typeof body !== 'string') {
+      body = exports.inspect(body);
+    }
 
-      curl = "shell> curl ";
+    curl = "shell> curl ";
 
-      if (method === 'POST') {
-        response = internal.arango.POST_RAW(url, body, headers);
-        curl += "-X " + method + " ";
-      }
-      else if (method === 'PUT') {
-        response = internal.arango.PUT_RAW(url, body, headers);
-        curl += "-X " + method + " ";
-      }
-      else if (method === 'GET') {
-        response = internal.arango.GET_RAW(url, headers);
-      }
-      else if (method === 'DELETE') {
-        response = internal.arango.DELETE_RAW(url, headers);
-        curl += "-X " + method + " ";
-      }
-      else if (method === 'PATCH') {
-        response = internal.arango.PATCH_RAW(url, body, headers);
-        curl += "-X " + method + " ";
-      }
-      else if (method === 'HEAD') {
-        response = internal.arango.HEAD_RAW(url, headers);
-        curl += "-X " + method + " ";
-      }
-      else if (method === 'OPTION') {
-        response = internal.arango.OPTION_RAW(url, body, headers);
-        curl += "-X " + method + " ";
-      }
-      if (headers !== undefined && headers !== "") {
-        for (i in headers) {
-          if (headers.hasOwnProperty(i)) {
-            curl += "--header \'" + i + ": " + headers[i] + "\' ";
-          }
+    if (method === 'POST') {
+      response = exports.arango.POST_RAW(url, body, headers);
+      curl += "-X " + method + " ";
+    }
+    else if (method === 'PUT') {
+      response = exports.arango.PUT_RAW(url, body, headers);
+      curl += "-X " + method + " ";
+    }
+    else if (method === 'GET') {
+      response = exports.arango.GET_RAW(url, headers);
+    }
+    else if (method === 'DELETE') {
+      response = exports.arango.DELETE_RAW(url, headers);
+      curl += "-X " + method + " ";
+    }
+    else if (method === 'PATCH') {
+      response = exports.arango.PATCH_RAW(url, body, headers);
+      curl += "-X " + method + " ";
+    }
+    else if (method === 'HEAD') {
+      response = exports.arango.HEAD_RAW(url, headers);
+      curl += "-X " + method + " ";
+    }
+    else if (method === 'OPTION') {
+      response = exports.arango.OPTION_RAW(url, body, headers);
+      curl += "-X " + method + " ";
+    }
+    if (headers !== undefined && headers !== "") {
+      for (i in headers) {
+        if (headers.hasOwnProperty(i)) {
+          curl += "--header \'" + i + ": " + headers[i] + "\' ";
         }
       }
+    }
 
-      if (body !== undefined && body !== "") {
-        curl += "--data-binary @- ";
-      }
+    if (body !== undefined && body !== "") {
+      curl += "--data-binary @- ";
+    }
 
-      curl += "--dump - http://localhost:8529" + url;
+    curl += "--dump - http://localhost:8529" + url;
 
-      appender(curl + "\n");
+    appender(curl + "\n");
 
-      if (body !== undefined && body !== "" && body !== "undefined") {
-        appender(body + "\n");
-      }
+    if (body !== undefined && body !== "" && body) {
+      appender(body + "\n");
+    }
 
-      appender("\n");
+    appender("\n");
 
-      return response;
-    };
+    return response;
   };
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief logs a raw response
 ////////////////////////////////////////////////////////////////////////////////
 
-  internal.appendRawResponse = function (appender) {
-    return function (response) {
-      var key;
-      var headers = response.headers;
+exports.appendRawResponse = function (appender) {
+  return function (response) {
+    var key;
+    var headers = response.headers;
 
-      // generate header
-      appender("HTTP/1.1 " + headers['http/1.1'] + "\n");
+    // generate header
+    appender("HTTP/1.1 " + headers['http/1.1'] + "\n");
 
-      for (key in headers) {
-        if (headers.hasOwnProperty(key)) {
-          if (key !== 'http/1.1' && key !== 'server' && key !== 'connection'
-              && key !== 'content-length') {
-            appender(key + ": " + headers[key] + "\n");
-          }
+    for (key in headers) {
+      if (headers.hasOwnProperty(key)) {
+        if (key !== 'http/1.1' && key !== 'server' && key !== 'connection'
+            && key !== 'content-length') {
+          appender(key + ": " + headers[key] + "\n");
         }
       }
+    }
 
+    appender("\n");
+
+    // append body
+    if (response.body !== undefined) {
+      appender(exports.inspect(response.body));
       appender("\n");
-
-      // append body
-      if (response.body !== undefined) {
-        appender(internal.inspect(response.body));
-        appender("\n");
-      }
-    };
+    }
   };
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief logs a response in JSON
 ////////////////////////////////////////////////////////////////////////////////
 
-  internal.appendJsonResponse = function (appender) {
-    return function (response) {
-      var rawAppend = internal.appendRawResponse(appender);
+exports.appendJsonResponse = function (appender) {
+  return function (response) {
+    var rawAppend = exports.appendRawResponse(appender);
 
-      // copy original body (this is necessary because "response" is passed by reference)
-      var copy = response.body;
-      // overwrite body with parsed JSON && append
-      response.body = JSON.parse(response.body);
-      rawAppend(response);
-      // restore original body
-      response.body = copy;
-    };
+    // copy original body (this is necessary because "response" is passed by reference)
+    var copy = response.body;
+    // overwrite body with parsed JSON && append
+    response.body = JSON.parse(response.body);
+    rawAppend(response);
+    // restore original body
+    response.body = copy;
   };
+};
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                                  public functions
@@ -98221,40 +99318,39 @@ function stop_color_print () {
 /// @brief log function
 ////////////////////////////////////////////////////////////////////////////////
 
-  internal.log = function (level, msg) {
-    internal.output(level, ": ", msg, "\n");
-  };
+exports.log = function (level, msg) {
+  exports.output(level, ": ", msg, "\n");
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief sprintf wrapper
 ////////////////////////////////////////////////////////////////////////////////
 
-  try {
-    if (window) {
-      internal.sprintf = function (format) {
-        var n = arguments.length;
-        if (n === 0) {
-          return "";
-        }
-        if (n <= 1) {
-          return String(format);
-        }
+try {
+  if (typeof window !== 'undefined') {
+    exports.sprintf = function (format) {
+      var n = arguments.length;
+      if (n === 0) {
+        return "";
+      }
+      if (n <= 1) {
+        return String(format);
+      }
 
-        var i;
-        var args = [ ];
-        for (i = 1; i < arguments.length; ++i) {
-          args.push(arguments[i]);
-        }
-        i = 0;
+      var i;
+      var args = [ ];
+      for (i = 1; i < arguments.length; ++i) {
+        args.push(arguments[i]);
+      }
+      i = 0;
 
-        return format.replace(/%[dfs]/, function () {
-          return String(args[i++]);
-        });
-      };
-    }
+      return format.replace(/%[dfs]/, function () {
+        return String(args[i++]);
+      });
+    };
   }
-  catch (err) {
-  }
+}
+catch (e) {}
 
 }());
 
@@ -98267,8 +99363,9 @@ function stop_color_print () {
 // outline-regexp: "/// @brief\\|/// @addtogroup\\|/// @page\\|// --SECTION--\\|/// @\\}\\|/\\*jslint"
 // End:
 
-/*jshint unused: false, -W051: true */
-/*global require, console: true, IS_EXECUTE_SCRIPT, IS_EXECUTE_STRING, IS_CHECK_SCRIPT, IS_UNIT_TESTS, IS_JS_LINT */
+/*jshint -W051:true */
+/*global global:true, window, require */
+'use strict';
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief ArangoShell client API
@@ -98297,36 +99394,48 @@ function stop_color_print () {
 /// @author Copyright 2012-2013, triAGENS GmbH, Cologne, Germany
 ////////////////////////////////////////////////////////////////////////////////
 
+if (typeof global === 'undefined' && typeof window !== 'undefined') {
+  global = window;
+}
+
 // -----------------------------------------------------------------------------
 // --SECTION--                                                  global functions
 // -----------------------------------------------------------------------------
 
 ////////////////////////////////////////////////////////////////////////////////
+// @brief common globals
+////////////////////////////////////////////////////////////////////////////////
+
+global.Buffer = require("buffer").Buffer;
+global.process = require("process");
+global.setInterval = global.setInterval || function () {};
+global.clearInterval = global.clearInterval || function () {};
+global.setTimeout = global.setTimeout || function () {};
+global.clearTimeout = global.clearTimeout || function () {};
+
+////////////////////////////////////////////////////////////////////////////////
 /// @brief start paging
 ////////////////////////////////////////////////////////////////////////////////
 
-function start_pager () {
-  "use strict";
+global.start_pager = function start_pager () {
   var internal = require("internal");
   internal.startPager();
-}
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief stop paging
 ////////////////////////////////////////////////////////////////////////////////
 
-function stop_pager () {
-  "use strict";
+global.stop_pager = function stop_pager () {
   var internal = require("internal");
   internal.stopPager();
-}
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief print the overall help
 ////////////////////////////////////////////////////////////////////////////////
 
-function help () {
-  "use strict";
+global.help = function help () {
   var internal = require("internal");
   var arangodb = require("org/arangodb");
   var arangosh = require("org/arangodb/arangosh");
@@ -98337,67 +99446,57 @@ function help () {
   arangodb.ArangoStatement.prototype._help();
   arangodb.ArangoQueryCursor.prototype._help();
   internal.print(arangosh.helpExtended);
-}
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief clear screen (poor man's way)
 ////////////////////////////////////////////////////////////////////////////////
 
-function clear () {
-  "use strict";
+global.clear = function clear () {
   var internal = require("internal");
-  var i;
   var result = '';
 
-  for (i = 0; i < 100; ++i) {
+  for (var i = 0; i < 100; ++i) {
     result += '\n';
   }
   internal.print(result);
-}
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief global 'console'
 ////////////////////////////////////////////////////////////////////////////////
 
-if (typeof console === 'undefined') {
-  console = require("console");
-}
+global.console = global.console || require("console");
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief global 'db'
 ////////////////////////////////////////////////////////////////////////////////
 
-var db = require("org/arangodb").db;
+global.db = require("org/arangodb").db;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief global 'arango'
 ////////////////////////////////////////////////////////////////////////////////
 
-var arango = require("org/arangodb").arango;
+global.arango = require("org/arangodb").arango;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief global 'fm'
 ////////////////////////////////////////////////////////////////////////////////
 
-var fm = require("org/arangodb/foxx/manager");
+global.fm = require("org/arangodb/foxx/manager");
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief global 'ArangoStatement'
 ////////////////////////////////////////////////////////////////////////////////
 
-var ArangoStatement = require("org/arangodb/arango-statement").ArangoStatement;
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief global 'Buffer'
-////////////////////////////////////////////////////////////////////////////////
-
-var Buffer = require("buffer").Buffer;
+global.ArangoStatement = require("org/arangodb/arango-statement").ArangoStatement;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief shell tutorial
 ////////////////////////////////////////////////////////////////////////////////
 
-var tutorial = require("org/arangodb/tutorial");
+global.tutorial = require("org/arangodb/tutorial");
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                                        initialise
@@ -98408,53 +99507,33 @@ var tutorial = require("org/arangodb/tutorial");
 ////////////////////////////////////////////////////////////////////////////////
 
 (function() {
-  "use strict";
   var internal = require("internal");
-  var arangosh = require("org/arangodb/arangosh");
-  var special;
 
-  if (internal.db !== undefined) {
+  if (internal.db) {
     try {
       internal.db._collections();
     }
-    catch (err) {
-    }
+    catch (e) {}
   }
 
-  try {
-    // these variables don't exist in the browser context
-    special = IS_EXECUTE_SCRIPT || IS_EXECUTE_STRING || IS_CHECK_SCRIPT || IS_UNIT_TESTS || IS_JS_LINT;
-  }
-  catch (err2) {
-    special = false;
-  }
-
-  if (internal.quiet !== true && ! special) {
-    if (typeof internal.arango !== "undefined") {
-      if (typeof internal.arango.isConnected !== "undefined" && internal.arango.isConnected()) {
-        internal.print("Type 'tutorial' for a tutorial or 'help' to see common examples");
-      }
+  if (internal.quiet !== true) {
+    if (internal.arango && internal.arango.isConnected && internal.arango.isConnected()) {
+      internal.print("Type 'tutorial' for a tutorial or 'help' to see common examples");
     }
   }
-}());
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief read rc file
 ////////////////////////////////////////////////////////////////////////////////
 
-(function () {
-  /*jshint strict: false */
-  var __special__;
-
-  try {
-    // these variables are not defined in the browser context
-    __special__ = IS_EXECUTE_SCRIPT || IS_EXECUTE_STRING || IS_CHECK_SCRIPT || IS_UNIT_TESTS || IS_JS_LINT;
-  }
-  catch (err) {
-    __special__ = true;
-  }
-
-  if (! __special__) {
+  // these variables are not defined in the browser context
+  if (
+    global.IS_EXECUTE_SCRIPT ||
+    global.IS_EXECUTE_STRING ||
+    global.IS_CHECK_SCRIPT ||
+    global.IS_UNIT_TESTS ||
+    global.IS_JS_LINT
+  ) {
     try {
       // this will not work from within a browser
       var __fs__ = require("fs");
@@ -98466,20 +99545,18 @@ var tutorial = require("org/arangodb/tutorial");
         eval(__content__);
       }
     }
-    catch (err2) {
-      require("console").warn("arangosh.rc: %s", String(err2));
+    catch (e) {
+      require("console").warn("arangosh.rc: %s", String(e));
     }
   }
 
   try {
-    delete IS_EXECUTE_SCRIPT;
-    delete IS_EXECUTE_STRING;
-    delete IS_CHECK_SCRIPT;
-    delete IS_UNIT_TESTS;
-    delete IS_JS_LINT;
-  }
-  catch (err3) {
-  }
+    delete global.IS_EXECUTE_SCRIPT;
+    delete global.IS_EXECUTE_STRING;
+    delete global.IS_CHECK_SCRIPT;
+    delete global.IS_UNIT_TESTS;
+    delete global.IS_JS_LINT;
+  } catch (e) {}
 }());
 
 // -----------------------------------------------------------------------------
@@ -98491,8 +99568,9 @@ var tutorial = require("org/arangodb/tutorial");
 // outline-regexp: "\\(/// @brief\\|/// @addtogroup\\|// --SECTION--\\|/// @page\\|/// @\\}\\)"
 // End:
 
-/*jshint -W051: true */
-/*global require, SYS_GETLINE, SYS_LOG, jqconsole, Symbol */
+/*jshint -W051:true */
+/*global jqconsole, Symbol */
+'use strict';
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief module "console"
@@ -98521,38 +99599,37 @@ var tutorial = require("org/arangodb/tutorial");
 /// @author Copyright 2010-2013, triAGENS GmbH, Cologne, Germany
 ////////////////////////////////////////////////////////////////////////////////
 
-(function () {
-  /*jshint strict: false */
-  var exports = require("console");
-
-  var sprintf = require("internal").sprintf;
-  var inspect = require("internal").inspect;
-
 // -----------------------------------------------------------------------------
 // --SECTION--                                                  Module "console"
 // -----------------------------------------------------------------------------
+
+(function () {
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                                 private variables
 // -----------------------------------------------------------------------------
 
+var exports = require("console");
+var sprintf = require("internal").sprintf;
+var inspect = require("internal").inspect;
+
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief group level
 ////////////////////////////////////////////////////////////////////////////////
 
-  var groupLevel = "";
+var groupLevel = "";
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief timers
 ////////////////////////////////////////////////////////////////////////////////
 
-  var timers;
-  try {
-    timers = Object.create(null);
-  }
-  catch (err) {
-    timers = {};
-  }
+var timers;
+try {
+  timers = Object.create(null);
+}
+catch (e) {
+  timers = {};
+}
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                                 private functions
@@ -98562,65 +99639,65 @@ var tutorial = require("org/arangodb/tutorial");
 /// @brief internal logging
 ////////////////////////////////////////////////////////////////////////////////
 
-  var log;
+var log;
 
-  try {
-    // this will work when we are in arangod but not in the browser / web interface
-    log = SYS_LOG;
-    delete SYS_LOG;
-  }
-  catch (err) {
-    // this will work in the web interface
-    log = function (level, message) {
-      if (jqconsole) {
-        jqconsole.Write(message + "\n", 'jssuccess');
-      }
-    };
-  }
+if (global.SYS_LOG) {
+  // this will work when we are in arangod but not in the browser / web interface
+  log = global.SYS_LOG;
+  delete global.SYS_LOG;
+}
+else {
+  // this will work in the web interface
+  log = function (level, message) {
+    if (typeof jqconsole !== 'undefined') {
+      jqconsole.Write(message + "\n", 'jssuccess');
+    }
+  };
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief internal logging with group level
 ////////////////////////////////////////////////////////////////////////////////
 
-  function logGroup (level, msg) {
-    'use strict';
-
-    log(level, groupLevel + msg);
-  }
+function logGroup (level, msg) {
+  log(level, groupLevel + msg);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief try to prettify
 ////////////////////////////////////////////////////////////////////////////////
 
-  function prepareArgs (args) {
-    var ShapedJson = require("internal").ShapedJson;
-    var result = [];
-    var i;
+function prepareArgs (args) {
+  var ShapedJson = require("internal").ShapedJson;
+  var result = [];
 
-    if (0 < args.length && typeof args[0] !== "string") {
-      result.push("%s");
-    }
-
-    for (i = 0;  i < args.length;  ++i) {
-      var arg = args[i];
-
-      if (typeof arg === "object") {
-        if (ShapedJson !== undefined && arg instanceof ShapedJson) {
-          arg = inspect(arg, {prettyPrint: false});
-        }
-        else if (arg === null) {
-          arg = "null";
-        }
-        else if (Object.prototype.isPrototypeOf(arg) || Array.isArray(arg)) {
-          arg = inspect(arg, {prettyPrint: false});
-        }
-      }
-
-      result.push(arg);
-    }
-
-    return result;
+  if (0 < args.length && typeof args[0] !== "string") {
+    result.push("%s");
   }
+
+  for (var i = 0; i < args.length; ++i) {
+    var arg = args[i];
+
+    if (typeof arg === "object") {
+      if (ShapedJson !== undefined && arg instanceof ShapedJson) {
+        arg = inspect(arg, {prettyPrint: false});
+      }
+      else if (arg === null) {
+        arg = "null";
+      }
+      else if (arg instanceof Date || arg instanceof RegExp) {
+        arg = String(arg);
+      }
+      else if (Object.prototype.isPrototypeOf(arg) || Array.isArray(arg)) {
+        arg = inspect(arg, {prettyPrint: false});
+      }
+    }
+
+    result.push(arg);
+  }
+
+  return result;
+}
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                                  public functions
@@ -98630,329 +99707,304 @@ var tutorial = require("org/arangodb/tutorial");
 /// @brief assert
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.assert = function (condition) {
-    'use strict';
+exports.assert = function (condition) {
+  if (condition) {
+    return;
+  }
 
-    if (condition) {
-      return;
-    }
+  var args = Array.prototype.slice.call(arguments, 1);
+  var msg;
 
-    var args = Array.prototype.slice.call(arguments, 1);
-    var msg;
+  try {
+    msg = sprintf.apply(sprintf, prepareArgs(args));
+  }
+  catch (e) {
+    msg = e + ": " + args;
+  }
 
-    try {
-      msg = sprintf.apply(sprintf, prepareArgs(args));
-    }
-    catch (err) {
-      msg = err + ": " + args;
-    }
+  logGroup("error", msg);
 
-    logGroup("error", msg);
-
-    require('assert').ok(condition, msg);
-  };
+  require('assert').ok(condition, msg);
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief debug
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.debug = function () {
-    'use strict';
+exports.debug = function () {
+  var msg;
 
-    var msg;
+  try {
+    msg = sprintf.apply(sprintf, prepareArgs(arguments));
+  }
+  catch (e) {
+    msg = e + ": " + arguments;
+  }
 
-    try {
-      msg = sprintf.apply(sprintf, prepareArgs(arguments));
-    }
-    catch (err) {
-      msg = err + ": " + arguments;
-    }
-
-    logGroup("debug", msg);
-  };
+  logGroup("debug", msg);
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief debugLines
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.debugLines = function () {
-    'use strict';
+exports.debugLines = function () {
+  var msg;
 
-    var msg;
+  try {
+    msg = sprintf.apply(sprintf, prepareArgs(arguments));
+  }
+  catch (e) {
+    msg = e + ": " + arguments;
+  }
 
-    try {
-      msg = sprintf.apply(sprintf, prepareArgs(arguments));
-    }
-    catch (err) {
-      msg = err + ": " + arguments;
-    }
+  var a = msg.split("\n");
+  var i;
 
-    var a = msg.split("\n");
-    var i;
-
-    for (i = 0;  i < a.length;  ++i) {
-      logGroup("debug", a[i]);
-    }
-  };
+  for (i = 0;  i < a.length;  ++i) {
+    logGroup("debug", a[i]);
+  }
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief dir
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.dir = function (object) {
-    'use strict';
-
-    logGroup("info", inspect(object));
-  };
+exports.dir = function (object) {
+  logGroup("info", inspect(object));
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief error
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.error = function () {
-    'use strict';
+exports.error = function () {
+  var msg;
 
-    var msg;
+  try {
+    msg = sprintf.apply(sprintf, prepareArgs(arguments));
+  }
+  catch (e) {
+    msg = e + ": " + arguments;
+  }
 
-    try {
-      msg = sprintf.apply(sprintf, prepareArgs(arguments));
-    }
-    catch (err) {
-      msg = err + ": " + arguments;
-    }
-
-    logGroup("error", msg);
-  };
+  logGroup("error", msg);
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief errorLines
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.errorLines = function () {
-    'use strict';
+exports.errorLines = function () {
+  var msg;
 
-    var msg;
+  try {
+    msg = sprintf.apply(sprintf, prepareArgs(arguments));
+  }
+  catch (e) {
+    msg = e + ": " + arguments;
+  }
 
-    try {
-      msg = sprintf.apply(sprintf, prepareArgs(arguments));
-    }
-    catch (err) {
-      msg = err + ": " + arguments;
-    }
-
-    var a = msg.split("\n");
-    var i;
-
-    for (i = 0;  i < a.length;  ++i) {
-      logGroup("error", a[i]);
-    }
-  };
+  var a = msg.split("\n");
+  for (var i = 0; i < a.length; ++i) {
+    logGroup("error", a[i]);
+  }
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief getline
 ////////////////////////////////////////////////////////////////////////////////
 
-  if (typeof SYS_GETLINE !== "undefined") {
-    exports.getline = SYS_GETLINE;
-    delete SYS_GETLINE;
-  }
+if (global.SYS_GETLINE) {
+  exports.getline = global.SYS_GETLINE;
+  delete global.SYS_GETLINE;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief group
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.group = function () {
-    'use strict';
+exports.group = function () {
+  var msg;
 
-    var msg;
+  try {
+    msg = sprintf.apply(sprintf, prepareArgs(arguments));
+  }
+  catch (e) {
+    msg = e + ": " + arguments;
+  }
 
-    try {
-      msg = sprintf.apply(sprintf, prepareArgs(arguments));
-    }
-    catch (err) {
-      msg = err + ": " + arguments;
-    }
-
-    groupLevel = groupLevel + "  ";
-    logGroup("info", msg);
-  };
+  groupLevel = groupLevel + "  ";
+  logGroup("info", msg);
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief groupCollapsed
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.groupCollapsed = function () {
-    'use strict';
+exports.groupCollapsed = function () {
+  var msg;
 
-    var msg;
+  try {
+    msg = sprintf.apply(sprintf, prepareArgs(arguments));
+  }
+  catch (e) {
+    msg = e + ": " + arguments;
+  }
 
-    try {
-      msg = sprintf.apply(sprintf, prepareArgs(arguments));
-    }
-    catch (err) {
-      msg = err + ": " + arguments;
-    }
-
-    logGroup("info", msg);
-    groupLevel = groupLevel + "  ";
-  };
+  logGroup("info", msg);
+  groupLevel = groupLevel + "  ";
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief groupEnd
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.groupEnd = function () {
-    'use strict';
-
-    groupLevel = groupLevel.substr(2);
-  };
+exports.groupEnd = function () {
+  groupLevel = groupLevel.substr(2);
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief info
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.info = function () {
-    'use strict';
+exports.info = function () {
+  var msg;
 
-    var msg;
+  try {
+    msg = sprintf.apply(sprintf, prepareArgs(arguments));
+  }
+  catch (e) {
+    msg = e + ": " + arguments;
+  }
 
-    try {
-      msg = sprintf.apply(sprintf, prepareArgs(arguments));
-    }
-    catch (err) {
-      msg = err + ": " + arguments;
-    }
-
-    logGroup("info", msg);
-  };
+  logGroup("info", msg);
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief infoLines
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.infoLines = function () {
-    'use strict';
+exports.infoLines = function () {
+  var msg;
 
-    var msg;
+  try {
+    msg = sprintf.apply(sprintf, prepareArgs(arguments));
+  }
+  catch (e) {
+    msg = e + ": " + arguments;
+  }
 
-    try {
-      msg = sprintf.apply(sprintf, prepareArgs(arguments));
-    }
-    catch (err) {
-      msg = err + ": " + arguments;
-    }
+  var a = msg.split("\n");
+  var i;
 
-    var a = msg.split("\n");
-    var i;
-
-    for (i = 0;  i < a.length;  ++i) {
-      logGroup("info", a[i]);
-    }
-  };
+  for (i = 0;  i < a.length;  ++i) {
+    logGroup("info", a[i]);
+  }
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief log
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.log = exports.info;
+exports.log = exports.info;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief logLines
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.logLines = exports.infoLines;
+exports.logLines = exports.infoLines;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief time
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.time = function (label) {
-    'use strict';
+exports.time = function (label) {
+  if (typeof label !== 'string') {
+    throw new Error('label must be a string');
+  }
 
-    if (typeof label !== 'string') {
-      throw new Error('label must be a string');
-    }
+  var symbol = typeof Symbol === 'undefined' ? '%' + label : Symbol.for(label);
 
-    var symbol = typeof Symbol === 'undefined' ? '%' + label : Symbol.for(label);
-
-    timers[symbol] = Date.now();
-  };
+  timers[symbol] = Date.now();
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief timeEnd
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.timeEnd = function(label) {
-    'use strict';
+exports.timeEnd = function(label) {
+  var symbol = typeof Symbol === 'undefined' ? '%' + label : Symbol.for(label);
+  var time = timers[symbol];
 
-    var symbol = typeof Symbol === 'undefined' ? '%' + label : Symbol.for(label);
-    var time = timers[symbol];
+  if (! time) {
+    throw new Error('No such label: ' + label);
+  }
 
-    if (! time) {
-      throw new Error('No such label: ' + label);
-    }
+  var duration = Date.now() - time;
 
-    var duration = Date.now() - time;
+  delete timers[symbol];
 
-    delete timers[symbol];
-
-    logGroup("info", sprintf('%s: %dms', label, duration));
+  logGroup("info", sprintf('%s: %dms', label, duration));
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief trace
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.trace = function () {
-    var err = new Error();
-    err.name = 'trace';
-    err.message = sprintf.apply(sprintf, prepareArgs(arguments));
-    Error.captureStackTrace(err, exports.trace);
-    logGroup("info", err.stack);
-  };
+exports.trace = function () {
+  var err = new Error();
+  err.name = 'Trace';
+  err.message = sprintf.apply(sprintf, prepareArgs(arguments));
+  Error.captureStackTrace(err, exports.trace);
+  var a = err.stack.split("\n");
+  while (!a[a.length - 1]) {
+    a.pop();
+  }
+  var i;
+  for (i = 0;  i < a.length;  ++i) {
+    logGroup("info", a[i]);
+  }
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief warn
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.warn = function () {
-    'use strict';
+exports.warn = function () {
+  var msg;
 
-    var msg;
+  try {
+    msg = sprintf.apply(sprintf, prepareArgs(arguments));
+  }
+  catch (e) {
+    msg = e + ": " + arguments;
+  }
 
-    try {
-      msg = sprintf.apply(sprintf, prepareArgs(arguments));
-    }
-    catch (err) {
-      msg = err + ": " + arguments;
-    }
-
-    logGroup("warning", msg);
-  };
+  logGroup("warning", msg);
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief warnLines
 ////////////////////////////////////////////////////////////////////////////////
 
-  exports.warnLines = function () {
-    'use strict';
+exports.warnLines = function () {
+  var msg;
 
-    var msg;
+  try {
+    msg = sprintf.apply(sprintf, prepareArgs(arguments));
+  }
+  catch (e) {
+    msg = e + ": " + arguments;
+  }
 
-    try {
-      msg = sprintf.apply(sprintf, prepareArgs(arguments));
-    }
-    catch (err) {
-      msg = err + ": " + arguments;
-    }
+  var a = msg.split("\n");
+  var i;
 
-    var a = msg.split("\n");
-    var i;
-
-    for (i = 0;  i < a.length;  ++i) {
-      logGroup("warning", a[i]);
-    }
-  };
+  for (i = 0;  i < a.length;  ++i) {
+    logGroup("warning", a[i]);
+  }
+};
 
 }());
 
@@ -99496,12 +100548,23 @@ window.Users = Backbone.Model.extend({
       });
     },
 
-    setup: function(callback) {
-      sendRequest(this, callback, "PATCH", "setup");
+    runScript: function(name, callback) {
+      sendRequest(this, callback, "POST", "scripts/" + name);
     },
 
-    teardown: function(callback) {
-      sendRequest(this, callback, "PATCH", "teardown");
+    runTests: function (options, callback) {
+      $.ajax({
+        type: "POST",
+        url: "/_admin/aardvark/foxxes/tests?mount=" + this.encodedMount(),
+        data: JSON.stringify(options),
+        contentType: "application/json",
+        success: function(data) {
+          callback(null, data);
+        },
+        error: function(xhr) {
+          callback(xhr.responseJSON);
+        }
+      });
     },
 
     isSystem: function() {
@@ -99753,7 +100816,7 @@ window.Users = Backbone.Model.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, window, arangoCollectionModel, $, arangoHelper, data, _ */
+/*global Backbone, window, arangoCollectionModel, $, arangoHelper, data, _ */
 (function() {
   "use strict";
 
@@ -100083,7 +101146,7 @@ window.Users = Backbone.Model.extend({
 
 /*jshint browser: true */
 /*jshint strict: false, unused: false */
-/*global require, exports, Backbone, window, arangoDocument, arangoDocumentModel, $, arangoHelper */
+/*global Backbone, window, arangoDocument, arangoDocumentModel, $, arangoHelper */
 
 window.arangoDocument = Backbone.Collection.extend({
   url: '/_api/document/',
@@ -100306,7 +101369,7 @@ window.arangoDocument = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, window, Backbone, arangoDocumentModel, _, arangoHelper, $*/
+/*global window, Backbone, arangoDocumentModel, _, arangoHelper, $*/
 (function() {
   "use strict";
 
@@ -100667,7 +101730,7 @@ window.arangoDocument = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, activeUser, window, ArangoQuery, $, data, _, arangoHelper*/
+/*global Backbone, activeUser, window, ArangoQuery, $, data, _, arangoHelper*/
 (function() {
   "use strict";
 
@@ -100829,7 +101892,7 @@ window.ArangoReplication = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, window */
+/*global Backbone, window */
 window.StatisticsCollection = Backbone.Collection.extend({
   model: window.Statistics,
   url: "/_admin/statistics"
@@ -100837,7 +101900,7 @@ window.StatisticsCollection = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint strict: false, unused: false */
-/*global require, exports, Backbone, window */
+/*global Backbone, window */
 window.StatisticsDescriptionCollection = Backbone.Collection.extend({
   model: window.StatisticsDescription,
   url: "/_admin/statistics-description",
@@ -101199,7 +102262,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, EJS, $, window, arangoHelper, templateEngine */
+/*global Backbone, EJS, $, window, arangoHelper, templateEngine */
 
 (function() {
     "use strict";
@@ -101319,7 +102382,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, EJS, window, SwaggerUi, hljs, document, $, arango */
+/*global Backbone, EJS, window, SwaggerUi, hljs, document, $, arango */
 /*global templateEngine*/
 
 (function() {
@@ -101381,11 +102444,12 @@ window.ArangoUsers = Backbone.Collection.extend({
       'click .delete': 'deleteApp',
       'click #configure-app': 'showConfigureDialog',
       'click #app-switch-mode': 'toggleDevelopment',
-      'click #app-setup': 'setup',
-      'click #app-teardown': 'teardown',
-      "click #app-scripts": "toggleScripts",
+      "click #app-scripts [data-script]": "runScript",
+      "click #app-tests": "runTests",
       "click #app-upgrade": "upgradeApp",
-      "click #download-app": "downloadApp"
+      "click #download-app": "downloadApp",
+      "mouseenter #app-scripts": "showDropdown",
+      "mouseleave #app-scripts": "hideDropdown"
     },
 
     downloadApp: function() {
@@ -101399,10 +102463,6 @@ window.ArangoUsers = Backbone.Collection.extend({
       window.foxxInstallView.upgrade(mount, function() {
         window.App.applicationDetail(encodeURIComponent(mount));
       });
-    },
-
-    toggleScripts: function() {
-      $("#scripts_dropdown").toggle(200);
     },
 
     updateConfig: function() {
@@ -101430,16 +102490,31 @@ window.ArangoUsers = Backbone.Collection.extend({
       }.bind(this));
     },
 
-    setup: function() {
-      this.model.setup(function() {
-
+    runScript: function(event) {
+      event.preventDefault();
+      this.model.runScript($(event.currentTarget).attr('data-script'), function() {
       });
     },
 
-    teardown: function() {
-      this.model.teardown(function() {
-
-      });
+    runTests: function(event) {
+      event.preventDefault();
+      var warning = (
+        "WARNING: Running tests may result in destructive side-effects including data loss."
+        + " Please make sure not to run tests on a production database."
+        + (this.model.isDevelopment() ? (
+            "\n\nWARNING: This app is running in DEVELOPMENT MODE."
+            + " If any of the tests access the app's HTTP API they may become non-deterministic."
+          ) : "")
+        + "\n\nDo you really want to continue?"
+      );
+      if (!window.confirm(warning)) {
+        return;
+      }
+      this.model.runTests({reporter: 'suite'}, function (err, result) {
+        window.modalView.show(
+          "modalTestResults.ejs", "Test results", [], [err || result]
+        );
+      }.bind(this));
     },
 
     render: function() {
@@ -101502,7 +102577,7 @@ window.ArangoUsers = Backbone.Collection.extend({
         if (val === "" && opt.hasOwnProperty("default")) {
           cfg[key] = opt.default;
           return;
-        } 
+        }
         if (opt.type === "number") {
           cfg[key] = parseFloat(val);
         } else if (opt.type === "integer") {
@@ -101596,6 +102671,16 @@ window.ArangoUsers = Backbone.Collection.extend({
         "modalTable.ejs", "Configure application", buttons, tableContent
       );
 
+    },
+
+    showDropdown: function () {
+      if (this.model.get('scripts').length) {
+        $("#scripts_dropdown").show(200);
+      }
+    },
+
+    hideDropdown: function () {
+      $("#scripts_dropdown").hide();
     }
 
   });
@@ -101763,7 +102848,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, window, exports, Backbone, EJS, $, templateEngine, arangoHelper, Joi*/
+/*global window, exports, Backbone, EJS, $, templateEngine, arangoHelper, Joi*/
 
 (function() {
   "use strict";
@@ -102475,7 +103560,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, EJS, $, flush, window, arangoHelper, nv, d3, localStorage*/
+/*global Backbone, EJS, $, flush, window, arangoHelper, nv, d3, localStorage*/
 /*global document, console, Dygraph, _,templateEngine */
 
 (function () {
@@ -103600,7 +104685,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, EJS, $, window, arangoHelper, jsoneditor, templateEngine */
+/*global Backbone, EJS, $, window, arangoHelper, jsoneditor, templateEngine */
 /*global document, _ */
 
 (function() {
@@ -103883,7 +104968,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, arangoHelper, _, $, window, arangoHelper, templateEngine, Joi, btoa */
+/*global arangoHelper, _, $, window, arangoHelper, templateEngine, Joi, btoa */
 
 (function() {
   "use strict";
@@ -105285,7 +106370,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 }());
 
 /*jshint browser: true */
-/*global require, $, Joi, _, alert, templateEngine*/
+/*global $, Joi, _, alert, templateEngine*/
 (function() {
   "use strict";
 
@@ -105439,6 +106524,11 @@ window.ArangoUsers = Backbone.Collection.extend({
         break;
       default:
     }
+    
+    if (! button.prop("disabled") && ! window.modalView.modalTestAll()) {
+      // trigger the validation so the "ok" button has the correct state
+      button.prop("disabled", true);
+    }
   };
 
   var installFoxxFromStore = function(e) {
@@ -105461,7 +106551,13 @@ window.ArangoUsers = Backbone.Collection.extend({
   };
 
   var installFoxxFromZip = function(files, data) {
-    if (window.modalView.modalTestAll()) {
+    if (data === undefined) {
+      data = this._uploadData;
+    }
+    else {
+      this._uploadData = data;
+    }
+    if (data && window.modalView.modalTestAll()) {
       var mount, flag;
       if (this._upgrade) {
         mount = this.mount;
@@ -105550,6 +106646,7 @@ window.ArangoUsers = Backbone.Collection.extend({
         installFoxxFromGithub.apply(this);
         break;
       case "zip":
+        installFoxxFromZip.apply(this);
         break;
       default:
     }
@@ -105581,6 +106678,7 @@ window.ArangoUsers = Backbone.Collection.extend({
     $("#upload-foxx-zip").uploadFile({
       url: "/_api/upload?multipart=true",
       allowedTypes: "zip",
+      multiple: false,
       onSuccess: installFoxxFromZip.bind(scope)
     });
     $.get("foxxes/fishbowl", function(list) {
@@ -105597,6 +106695,7 @@ window.ArangoUsers = Backbone.Collection.extend({
   FoxxInstallView.prototype.install = function(callback) {
     this.reload = callback;
     this._upgrade = false;
+    this._uploadData = undefined;
     delete this.mount;
     render(this, false);
     window.modalView.clearValidators();
@@ -105608,6 +106707,7 @@ window.ArangoUsers = Backbone.Collection.extend({
   FoxxInstallView.prototype.upgrade = function(mount, callback) {
     this.reload = callback;
     this._upgrade = true;
+    this._uploadData = undefined;
     this.mount = mount;
     render(this, true);
     window.modalView.clearValidators();
@@ -106299,7 +107399,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, EJS, arangoHelper, window, setTimeout, $, templateEngine*/
+/*global Backbone, EJS, arangoHelper, window, setTimeout, $, templateEngine*/
 
 (function() {
   "use strict";
@@ -107215,7 +108315,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, EJS, $, setTimeout, localStorage, ace, Storage, window, _ */
+/*global Backbone, EJS, $, setTimeout, localStorage, ace, Storage, window, _ */
 /*global _, arangoHelper, templateEngine, jQuery, Joi*/
 
 (function () {
@@ -107424,7 +108524,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, EJS, $, setTimeout, localStorage, ace, Storage, window, _, console */
+/*global Backbone, EJS, $, setTimeout, localStorage, ace, Storage, window, _, console */
 /*global _, arangoHelper, templateEngine, jQuery, Joi, d3*/
 
 (function () {
@@ -108355,7 +109455,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 
 /*jshint browser: true, evil: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, EJS, $, window, ace, jqconsole, handler, help, location*/
+/*global Backbone, EJS, $, window, ace, jqconsole, handler, help, location*/
 /*global templateEngine*/
 
 (function() {

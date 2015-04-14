@@ -1,5 +1,5 @@
-/*jshint strict: false, unused: false, -W051: true */
-/*global require, module, ArangoAgency, UPGRADE_ARGS: true, UPGRADE_STARTED: true */
+/*jshint -W051:true */
+'use strict';
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief upgrade or initialise the database
@@ -35,21 +35,12 @@
 /// @author Copyright 2014, triAGENS GmbH, Cologne, Germany
 ////////////////////////////////////////////////////////////////////////////////
 
-function updateGlobals() {
-  // set this global variable to inform the server we actually got until here...
-  UPGRADE_STARTED = true;
-
-  // delete the global variable
-  delete UPGRADE_ARGS;
-}
-
 (function (args) {
-  "use strict";
   var internal = require("internal");
   var fs = require("fs");
   var console = require("console");
   var userManager = require("org/arangodb/users");
-  var clusterManager = require("org/arangodb/cluster");
+  require("org/arangodb/cluster"); // TODO Is this unused or magic?
   var currentVersion = require("org/arangodb/database-version").CURRENT_VERSION;
   var sprintf = internal.sprintf;
   var db = internal.db;
@@ -413,7 +404,7 @@ function updateGlobals() {
       // cluster
       var cluster;
 
-      if (ArangoAgency.prefix() === "") {
+      if (global.ArangoAgency.prefix() === "") {
         cluster = CLUSTER_NONE;
       }
       else {
@@ -535,7 +526,7 @@ function updateGlobals() {
 
       task: function () {
         return createSystemCollection("_users", { 
-          waitForSync : true, 
+          waitForSync : false, 
           shardKeys: [ "user" ] 
         });
       }
@@ -694,7 +685,7 @@ function updateGlobals() {
 
       task: function () {
         return createSystemCollection("_graphs", {
-          waitForSync : true,
+          waitForSync : false,
           journalSize: 1024 * 1024
         });
       }
@@ -961,7 +952,7 @@ function updateGlobals() {
 
       task: function () {
         return createSystemCollection("_aal", {
-          waitForSync : true,
+          waitForSync : false,
           shardKeys: [ "name", "version" ]
         });
       }
@@ -1100,7 +1091,7 @@ function updateGlobals() {
       description: "create statistics collections",
 
       mode:        [ MODE_PRODUCTION, MODE_DEVELOPMENT ],
-      cluster:     [ CLUSTER_NONE, CLUSTER_LOCAL, CLUSTER_COORDINATOR_GLOBAL ],
+      cluster:     [ CLUSTER_NONE, CLUSTER_COORDINATOR_GLOBAL ],
       database:    [ DATABASE_INIT, DATABASE_UPGRADE ],
 
       task: function () {
@@ -1315,7 +1306,6 @@ function updateGlobals() {
         }
         var mapAppZip = {};
         var tmp;
-        var tmpZip;
         var path;
         var fmUtils = require("org/arangodb/foxx/manager-utils");
         var foxxManager = require("org/arangodb/foxx/manager");
@@ -1338,7 +1328,7 @@ function updateGlobals() {
         var devPath = module.devAppPath();
         var mapDevAppZip = {};
         var i;
-        if (devPath !== "") {
+        if (devPath !== undefined) {
           appsToZip = fs.list(devPath);
           for (i = 0; i < appsToZip.length; ++i) {
             path = fs.join(devPath, appsToZip[i]);
@@ -1436,11 +1426,14 @@ function updateGlobals() {
     return upgradeDatabase();
   }
 
-  updateGlobals();
+  // set this global variable to inform the server we actually got until here...
+  global.UPGRADE_STARTED = true;
+
+  delete global.UPGRADE_ARGS;
 
   // and run the upgrade
   return upgrade();
-}(UPGRADE_ARGS));
+}(global.UPGRADE_ARGS));
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                                       END-OF-FILE

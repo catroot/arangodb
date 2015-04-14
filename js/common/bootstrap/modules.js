@@ -1,6 +1,5 @@
-/*jshint -W051: true */
-/*global require, module: true, STARTUP_PATH, DEV_APP_PATH, APP_PATH, MODULES_PATH,
-  EXPORTS_SLOW_BUFFER, SYS_PLATFORM, REGISTER_EXECUTE_FILE, SYS_EXECUTE, SYS_READ */
+/*jshint -W051:true */
+'use strict';
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief JavaScript server functions
@@ -37,7 +36,7 @@
 /// @brief top-level module
 ////////////////////////////////////////////////////////////////////////////////
 
-module = null;
+global.module = null;
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                                  global functions
@@ -48,8 +47,7 @@ module = null;
 ////////////////////////////////////////////////////////////////////////////////
 
 function require (path) {
-  "use strict";
-  return module.require(path);
+  return global.module.require(path);
 }
 
 // -----------------------------------------------------------------------------
@@ -57,13 +55,12 @@ function require (path) {
 // -----------------------------------------------------------------------------
 
 (function () {
-  /*jshint strict: false */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief running under windows
 ////////////////////////////////////////////////////////////////////////////////
 
-  var isWindows = SYS_PLATFORM.substr(0, 3) === 'win';
+  var isWindows = global.SYS_PLATFORM.substr(0, 3) === 'win';
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief appPath
@@ -71,9 +68,9 @@ function require (path) {
 
   var appPath;
 
-  if (typeof APP_PATH !== "undefined") {
-    appPath = APP_PATH;
-    delete APP_PATH;
+  if (global.APP_PATH) {
+    appPath = global.APP_PATH;
+    delete global.APP_PATH;
   }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -82,9 +79,9 @@ function require (path) {
 
   var devAppPath;
 
-  if (typeof DEV_APP_PATH !== "undefined") {
-    devAppPath = DEV_APP_PATH;
-    delete DEV_APP_PATH;
+  if (global.DEV_APP_PATH) {
+    devAppPath = global.DEV_APP_PATH;
+    delete global.DEV_APP_PATH;
   }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -93,9 +90,9 @@ function require (path) {
 
   var modulesPaths = [];
 
-  if (typeof MODULES_PATH !== "undefined") {
-    modulesPaths = MODULES_PATH;
-    delete MODULES_PATH;
+  if (global.MODULES_PATH) {
+    modulesPaths = global.MODULES_PATH;
+    delete global.MODULES_PATH;
   }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -104,8 +101,8 @@ function require (path) {
 
   var startupPath = "";
 
-  if (typeof STARTUP_PATH !== "undefined") {
-    startupPath = STARTUP_PATH;
+  if (global.STARTUP_PATH) {
+    startupPath = global.STARTUP_PATH;
   }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -163,6 +160,15 @@ function require (path) {
 // --SECTION--                                                 private functions
 // -----------------------------------------------------------------------------
 
+  function extend(a, b) {
+    if (b) {
+      Object.keys(b).forEach(function (key) {
+        a[key] = b[key];
+      });
+    }
+    return a;
+  }
+
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief normalizes a module name
 ///
@@ -176,7 +182,6 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   function normalizeModuleName (prefix, path) {
-    'use strict';
 
     var i;
 
@@ -195,6 +200,9 @@ function require (path) {
     // relative path
     if (p[0] === "." || p[0] === "..") {
       q = prefix.split('/');
+      if (q[q.length - 1].indexOf('.') > 0) {
+        q = q.slice(0, -1);
+      }
       q = q.concat(p);
     }
 
@@ -211,8 +219,12 @@ function require (path) {
 
       if (x === "..") {
         if (n.length === 0) {
-          throw new Error("cannot use '..' to escape top-level-directory, prefix = '"
-                          + prefix + "', path = '" + path + "'");
+          throw new internal.ArangoError({
+            errorNum: internal.errors.ERROR_MODULE_CAN_NOT_ESCAPE.code,
+            errorMessage: internal.errors.ERROR_MODULE_CAN_NOT_ESCAPE.message
+            + " Prefix: " + prefix
+            + " Path: " + path
+          });
         }
 
         n.pop();
@@ -230,7 +242,6 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   function path2FileUri (path) {
-    'use strict';
 
     if (isWindows) {
       path = path.replace(/\\/g, '/');
@@ -251,13 +262,11 @@ function require (path) {
     if (isWindows) {
       if (path[1] === ':') {
         if (path[2] !== '/') {
-          var e = new Error("drive local path '" + path
-                          + "'is not supported");
-
-          e.moduleNotFound = false;
-          e._path = path;
-
-          throw e;
+          throw new internal.ArangoError({
+            errorNum: internal.errors.ERROR_MODULE_DRIVE_LETTER.code,
+            errorMessage: internal.errors.ERROR_MODULE_DRIVE_LETTER.message
+            + " Path: " + path
+          });
         }
 
         return "file:///" + path;
@@ -272,7 +281,6 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   function fileUri2Path (uri) {
-    'use strict';
 
     if (uri.substr(0, 8) !== "file:///") {
       return null;
@@ -287,13 +295,11 @@ function require (path) {
     if (isWindows) {
       if (filename[1] === ':') {
         if (filename[2] !== '/') {
-          var e = new Error("drive local path '" + filename
-                          + "'is not supported");
-
-          e.moduleNotFound = false;
-          e._path = filename;
-
-          throw e;
+          throw new internal.ArangoError({
+            errorNum: internal.errors.ERROR_MODULE_DRIVE_LETTER.code,
+            errorMessage: internal.errors.ERROR_MODULE_DRIVE_LETTER.message
+            + " Path: " + filename
+          });
         }
 
         return filename;
@@ -308,7 +314,6 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   function checkModulePathFileNoCache (root, path) {
-    'use strict';
 
     var filename = fs.join(root, path);
     var agumented;
@@ -331,21 +336,18 @@ function require (path) {
         type = "coffee";
       }
       else {
-        var e = new Error("corrupted package '" + path
-                         + "', unknown file type");
-
-        e.moduleNotFound = false;
-        e._path = path;
-        e._filename = filename;
-
-        throw e;
+        throw new internal.ArangoError({
+          errorNum: internal.errors.ERROR_MODULE_UNKNOWN_FILE_TYPE.code,
+          errorMessage: internal.errors.ERROR_MODULE_UNKNOWN_FILE_TYPE.message
+          + " Path: " + path
+        });
       }
 
       return {
         id: id,
         path: normalizeModuleName(path + "/.."),
         origin: path2FileUri(filename),
-        type: type 
+        type: type
       };
     }
 
@@ -357,7 +359,8 @@ function require (path) {
         id: path,
         path: normalizeModuleName(path + "/.."),
         origin: path2FileUri(agumented),
-        type: "js" };
+        type: "js"
+      };
     }
 
     // try to append ".json"
@@ -368,7 +371,7 @@ function require (path) {
         id: path,
         path: normalizeModuleName(path + "/.."),
         origin: path2FileUri(agumented),
-        type: "json" 
+        type: "json"
       };
     }
 
@@ -380,7 +383,7 @@ function require (path) {
         id: path,
         path: normalizeModuleName(path + "/.."),
         origin: path2FileUri(agumented),
-        type: "coffee" 
+        type: "coffee"
       };
     }
 
@@ -393,7 +396,7 @@ function require (path) {
           id: fs.join(path, "index"),
           path: path,
           origin: path2FileUri(agumented),
-          type: "js" 
+          type: "js"
         };
       }
     }
@@ -420,58 +423,60 @@ function require (path) {
 /// @brief checks if a file exists as document in a collection
 ////////////////////////////////////////////////////////////////////////////////
 
-  function checkModulePathDB (origin, path) {
-    'use strict';
+  function checkModulePathDb (origin, path) {
 
     if (internal.db === undefined) {
       return null;
     }
 
-    var re = /^db:\/\/(.*)\/$/;
-    var m = re.exec(origin);
+    var match = /^db:\/\/(.*)\/$/.exec(origin);
 
-    if (m === null) {
-      throw new Error("corrupted package origin '" + origin + "'");
+    if (match === null) {
+      throw new internal.ArangoError({
+        errorNum: internal.errors.ERROR_MODULE_BAD_PACKAGE_ORIGIN.code,
+        errorMessage: internal.errors.ERROR_MODULE_BAD_PACKAGE_ORIGIN.message
+        + " Origin: " + origin
+      });
     }
 
-    var n;
+    var doc;
+    var collection;
+    var collectionName = match[1];
 
     try {
-      var mc = internal.db._collection(m[1]);
+      collection = internal.db._collection(collectionName);
 
-      if (mc === null || typeof mc.firstExample !== "function") {
+      if (collection === null || typeof collection.firstExample !== "function") {
         return null;
       }
 
-      n = mc.firstExample({ path: path });
+      doc = collection.firstExample({ path: path });
     }
     catch (err) {
       return null;
     }
 
-    if (n === null) {
+    if (doc === null) {
       return null;
     }
 
-    if (n.hasOwnProperty('content')) {
+    if (doc.hasOwnProperty('content')) {
       return {
         id: path,
         path: normalizeModuleName(path + "/.."),
         origin: origin + path.substr(1),
         type: "js",
-        content: n.content
+        content: doc.content,
+        revision: collection.revision()
       };
     }
 
-    var e = new Error("corrupted module '" + path
-                    + "', in collection '" + m[1]
-                    + "', no content");
-
-    e.moduleNotFound = false;
-    e._path = path;
-    e._origin = origin;
-
-    throw e;
+    throw new internal.ArangoError({
+      errorNum: internal.errors.ERROR_MODULE_DOCUMENT_IS_EMPTY.code,
+      errorMessage: internal.errors.ERROR_MODULE_DOCUMENT_IS_EMPTY.message
+      + " Collection: " + match[1]
+      + " Path: " + path
+    });
   }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -479,139 +484,48 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   function createModule (currentModule, currentPackage, description) {
-    'use strict';
-
-    var e;
-    var key;
-
-    var id = description.id;
-    var path = description.path;
-    var origin = description.origin;
-    var content = description.content;
-
-    // test for parse errors first and fail early if a parse error detected
-    if (typeof content !== "string") {
-      e = new Error("corrupted package '" + path
-                  + "', module content must be a string, not '"
-                  + typeof content + "'");
-
-      e.moduleNotFound = false;
-      e._path = path;
-      e._package = currentPackage.id;
-      e._packageOrigin = currentPackage._origin;
-
-      throw e;
-    }
-
-    if (! internal.parse(content)) {
-      e = new Error("corrupted package '" + path
-                  + "', Javascript parse error in file '"
-                  + origin + "'");
-
-      e.moduleNotFound = false;
-      e._path = path;
-      e._package = currentPackage.id;
-      e._packageOrigin = currentPackage._origin;
-
-      throw e;
-    }
-
-    // create a new module
+    var localModule;
     try {
-      var localModule = currentPackage.defineModule(
-        id,
+      localModule = currentPackage.defineModule(
+        description.id,
         "js",
-        new Module(id,
-                   currentPackage,
-                   currentModule._applicationContext,
-                   path,
-                   origin,
-                   currentPackage._isSystem));
+        new Module(
+          description.id,
+          currentPackage,
+          currentModule._applicationContext,
+          description.path,
+          description.origin,
+          currentPackage._isSystem
+        )
+      );
 
-      inFlight[id] = localModule;
+      inFlight[localModule.id] = localModule;
 
-      // create a new sandbox and execute
+      var context = {};
+
       var env = currentPackage._environment;
-
-      var sandbox = {};
-      sandbox.print = internal.print;
-
       if (env !== undefined) {
-        for (key in env) {
-          if (env.hasOwnProperty(key) && key !== "__myenv__") {
-            sandbox[key] = env[key];
-          }
-        }
+        Object.keys(env).forEach(function (key) {
+          context[key] = env[key];
+        });
       }
 
-      var filename = fileUri2Path(origin);
-
-      if (filename !== null) {
-        sandbox.__filename = filename;
-        sandbox.__dirname = normalizeModuleName(filename + "/..");
+      if (localModule._applicationContext) {
+        context.applicationContext = localModule._applicationContext;
       }
 
-      sandbox.module = localModule;
-      sandbox.exports = localModule.exports;
-
-      sandbox.require = function(path) {
-        return localModule.require(path);
-      };
-
-      if (localModule.hasOwnProperty("_applicationContext")) {
-        sandbox.applicationContext = localModule._applicationContext;
-      }
-
-      // try to execute the module source code
-      var script = "(function (__myenv__) {";
-
-      for (key in sandbox) {
-        if (sandbox.hasOwnProperty(key)) {
-          // using `key` like below is not safe (imagine a key named `foo bar`!)
-          // TODO: fix this
-          script += "var " + key + " = __myenv__[" + JSON.stringify(key) + "];";
-        }
-      }
-
-      // put to together a function body for the code
-      script += "delete __myenv__;"
-             +  "(function () {"
-             +  content
-             +  "\n}());"
-             +  "});";
-      // note: at least one newline character must be used here, otherwise
-      // a script ending with a single-line comment (two forward slashes)
-      // would render the function tail invalid
-      // adding a newline at the end will create stack traces with a line number
-      // one higher than the last line in the script file
-
-      var fun = internal.executeScript(script, undefined, filename);
-
-      if (fun === undefined) {
-        e = new Error("corrupted package '" + path
-                    + "', cannot create module context function for: "
-                    + script);
-
-        e.moduleNotFound = false;
-        e._path = path;
-        e._package = currentPackage.id;
-        e._packageOrigin = currentPackage._origin;
-
-        throw e;
-      }
-
-      fun(sandbox);
-
-      delete inFlight[id];
+      localModule.run(description.content, context);
 
       return localModule;
-    }
-    catch (err) {
-      delete inFlight[id];
-
-      currentPackage.clearModule(id, "js");
-
+    } catch (err) {
+      if (localModule) {
+        currentPackage.clearModule(localModule.id, "js");
+      }
       throw err;
+    } finally {
+      if (localModule) {
+        delete inFlight[localModule.id];
+      }
     }
   }
 
@@ -620,7 +534,6 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   function requireModuleFrom (currentModule, currentPackage, path) {
-    'use strict';
 
     var description = null;
 
@@ -628,19 +541,27 @@ function require (path) {
       var root = fileUri2Path(currentPackage._origin);
 
       if (root === null) {
-        throw new Error("corrupted package origin '" + currentPackage._origin + "'");
+        throw new internal.ArangoError({
+          errorNum: internal.errors.ERROR_MODULE_BAD_PACKAGE_ORIGIN.code,
+          errorMessage: internal.errors.ERROR_MODULE_BAD_PACKAGE_ORIGIN.message
+          + " Origin: " + currentPackage._origin
+        });
       }
 
       description = checkModulePathFile(currentPackage, root, path);
     }
-    else if (currentPackage._origin.substr(0, 5) === "db://") {
-      description = checkModulePathDB(currentPackage._origin, path);
+    else if (currentPackage._isDbPackage) {
+      description = checkModulePathDb(currentPackage._origin, path);
     }
     else if (currentPackage._origin.substr(0, 10) === "system:///") {
       description = null;
     }
     else {
-      throw new Error("package origin '" + currentPackage._origin + "' not supported");
+      throw new internal.ArangoError({
+        errorNum: internal.errors.ERROR_MODULE_BAD_PACKAGE_ORIGIN.code,
+        errorMessage: internal.errors.ERROR_MODULE_BAD_PACKAGE_ORIGIN.message
+        + " Origin: " + currentPackage._origin
+      });
     }
 
     if (description === null) {
@@ -650,14 +571,29 @@ function require (path) {
     var localModule = currentPackage.module(description.id, description.type);
 
     if (localModule !== null) {
-      return localModule;
+      if (currentPackage._isDbPackage) {
+        if (localModule._revision === description.revision) {
+          return localModule;
+        }
+        else {
+          currentPackage.clearModule(description.id, description.type);
+          localModule = null;
+        }
+      }
+      else {
+        return localModule;
+      }
     }
 
     if (currentPackage._origin.substr(0, 7) === "file://") {
       var filename = fileUri2Path(description.origin);
 
       if (filename === null) {
-        throw new Error("module origin '" + description.origin + "' not supported");
+        throw new internal.ArangoError({
+          errorNum: internal.errors.ERROR_MODULE_BAD_MODULE_ORIGIN.code,
+          errorMessage: internal.errors.ERROR_MODULE_BAD_MODULE_ORIGIN.message
+          + " Origin: " + description.origin
+        });
       }
 
       try {
@@ -671,29 +607,34 @@ function require (path) {
         throw err;
       }
     }
-    else if (currentPackage._origin.substr(0, 5) !== "db://") {
-      throw new Error("package origin '" + currentPackage._origin + "' not supported");
+    else if (!currentPackage._isDbPackage) {
+      throw new internal.ArangoError({
+        errorNum: internal.errors.ERROR_MODULE_BAD_MODULE_ORIGIN.code,
+        errorMessage: internal.errors.ERROR_MODULE_BAD_MODULE_ORIGIN.message
+        + " Origin: " + currentPackage._origin
+      });
     }
 
     if (description.type === "js") {
-      return createModule(currentModule, currentPackage, description);
+      localModule = createModule(currentModule, currentPackage, description);
     }
 
     if (description.type === "coffee") {
       var cs = require("coffee-script");
-
       description.content = cs.compile(description.content, {bare: true});
-
-      return createModule(currentModule, currentPackage, description);
+      localModule = createModule(currentModule, currentPackage, description);
     }
 
     if (description.type === "json") {
       localModule = { exports: JSON.parse(description.content) };
-
-      return currentPackage.defineModule(description.id, description.type, localModule);
+      localModule = currentPackage.defineModule(description.id, description.type, localModule);
     }
 
-    return null;
+    if (localModule !== null && currentPackage._isDbPackage) {
+      localModule._revision = description.revision;
+    }
+
+    return localModule;
   }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -701,10 +642,6 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   function createPackageAndModule (currentModule, currentPackage, path, dirname, filename) {
-    'use strict';
-
-    var e;
-
     var desc = JSON.parse(fs.read(filename));
     var mainfile = desc.main || "./index.js";
 
@@ -717,60 +654,39 @@ function require (path) {
     var description = checkModulePathFile(currentPackage, dirname, mainfile);
 
     if (description === null) {
-      e = new Error("corrupted package '" + path
-                  + "', cannot read main file '"
-                  + mainfile + "'");
-
-      e.moduleNotFound = false;
-      e._path = path;
-      e._package = currentPackage.id;
-      e._packageOrigin = currentPackage._origin;
-
-      throw e;
+      throw new internal.ArangoError({
+        errorNum: internal.errors.ERROR_MODULE_MAIN_NOT_READABLE.code,
+        errorMessage: internal.errors.ERROR_MODULE_MAIN_NOT_READABLE.message
+        + " Path: " + path
+        + " Main File: " + mainfile
+      });
     }
 
     if (description.type !== "js") {
-      e = new Error("corrupted package '" + path
-                  + "', main file '"
-                  + mainfile + "' is not of type js");
-
-      e.moduleNotFound = false;
-      e._path = path;
-      e._package = currentPackage.id;
-      e._packageOrigin = currentPackage._origin;
-
-      throw e;
+      throw new internal.ArangoError({
+        errorNum: internal.errors.ERROR_MODULE_MAIN_NOT_JS.code,
+        errorMessage: internal.errors.ERROR_MODULE_MAIN_NOT_JS.message
+        + " Path: " + path
+        + " Main File: " + mainfile
+        + " Type: " + description.type
+      });
     }
 
     var fname = fileUri2Path(description.origin);
 
     if (fname === null) {
-      e = new Error("corrupted package '" + path
-                  + "', module origin '" + description.origin
-                  + "' not supported");
-
-      e.moduleNotFound = false;
-      e._path = path;
-      e._package = currentPackage.id;
-      e._packageOrigin = currentPackage._origin;
-
-      throw e;
+      throw new internal.ArangoError({
+        errorNum: internal.errors.ERROR_MODULE_BAD_MODULE_ORIGIN.code,
+        errorMessage: internal.errors.ERROR_MODULE_BAD_MODULE_ORIGIN.message
+        + " Path: " + path
+        + " Origin: " + description.origin
+      });
     }
 
     description.content = fs.read(fname);
 
     // create a new package and module
     var pkg = new Package(path, desc, currentPackage, path2FileUri(dirname), currentPackage._isSystem);
-
-    pkg._environment = {
-      global: {},
-      process: require("process"),
-      setTimeout: function() {},
-      clearTimeout: function() {},
-      setInterval: function() {},
-      clearInterval: function() {}
-    };
-
     pkg._packageModule = createModule(currentModule, pkg, description);
 
     return pkg;
@@ -781,7 +697,6 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   function requirePackageFrom (currentModule, currentPackage, path) {
-    'use strict';
 
     if (currentPackage._origin.substr(0, 10) === "system:///") {
       return null;
@@ -794,7 +709,11 @@ function require (path) {
     var root = fileUri2Path(currentPackage._origin);
 
     if (root === null) {
-      throw new Error("package origin '" + currentPackage._origin + "' not supported");
+      throw new internal.ArangoError({
+        errorNum: internal.errors.ERROR_MODULE_BAD_PACKAGE_ORIGIN.code,
+        errorMessage: internal.errors.ERROR_MODULE_BAD_PACKAGE_ORIGIN.message
+        + " Origin: " + currentPackage._origin
+      });
     }
 
     path = normalizeModuleName(path);
@@ -822,7 +741,6 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   function requirePackage (currentModule, path) {
-    'use strict';
 
     var localModule;
     var i;
@@ -841,11 +759,17 @@ function require (path) {
       }
     }
 
-    // check if there is a global module with this name
+    // check if there is a global module with this name, skip db:// ones
+    // at first, see below for them
     for (i = 0;  i < globalPackages.length;  ++i) {
+      var gpkg = globalPackages[i];
+
+      if (gpkg._origin.substr(0,5) === "db://") {
+        continue;
+      }
 
       // use the GLOBAL module as current module
-      localModule = requireModuleFrom(module, globalPackages[i], path);
+      localModule = requireModuleFrom(global.module, gpkg, path);
 
       if (localModule !== null) {
         return localModule;
@@ -865,16 +789,16 @@ function require (path) {
 
     // check if there is a global package with this name
     for (i = 0;  i < globalPackages.length;  ++i) {
-
       // use the GLOBAL module as current module
-      localModule = requirePackageFrom(module, globalPackages[i], path);
+      localModule = requirePackageFrom(global.module, globalPackages[i], path);
 
       if (localModule !== null) {
         return localModule;
       }
     }
 
-    // check if there is a package containing this module
+    // check if there is a global package containing this module
+    var origpath = path;
     path = path.substr(1);
     if (path.indexOf('/') !== -1) {
       var p = path.split('/');
@@ -883,6 +807,23 @@ function require (path) {
 
       if (localModule !== null) {
         localModule = requirePackage(localModule, '/' + p.join('/'));
+        return localModule;
+      }
+    }
+
+    // check if there is a global module with this name, now take the 
+    // db:// ones only, the others have been checked above
+    for (i = 0;  i < globalPackages.length;  ++i) {
+      var gpkg2 = globalPackages[i];
+
+      if (gpkg2._origin.substr(0,5) !== "db://") {
+        continue;
+      }
+
+      // use the GLOBAL module as current module
+      localModule = requireModuleFrom(global.module, gpkg2, origpath);
+
+      if (localModule !== null) {
         return localModule;
       }
     }
@@ -896,17 +837,15 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   function requireModuleAbsolute (currentModule, path) {
-    'use strict';
-
     path = normalizeModuleName(path);
 
-   if (path === "/") {
-     var pkg = currentModule._package;
+    if (path === "/") {
+      var pkg = currentModule._package;
 
-     if (pkg.hasOwnProperty("_packageModule")) {
-       return pkg._packageModule;
-     }
-   }
+      if (pkg.hasOwnProperty("_packageModule")) {
+        return pkg._packageModule;
+      }
+    }
 
     return requireModuleFrom(currentModule, currentModule._package, path);
   }
@@ -916,19 +855,19 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   function requireModuleRelative (currentModule, path) {
-    'use strict';
-
-    return requireModuleAbsolute(currentModule,
-                                 normalizeModuleName(currentModule._path, path));
+    return requireModuleAbsolute(
+      currentModule,
+      normalizeModuleName(currentModule._path, path)
+    );
   }
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief executes a file with preprocessor
 ////////////////////////////////////////////////////////////////////////////////
 
-  REGISTER_EXECUTE_FILE((function () {
-    var read = SYS_READ;
-    var execute = SYS_EXECUTE;
+  global.REGISTER_EXECUTE_FILE((function () {
+    var read = global.SYS_READ;
+    var execute = global.SYS_EXECUTE;
 
     return function (filename) {
       var fileContent = read(filename);
@@ -943,7 +882,7 @@ function require (path) {
     };
   }()));
 
-  delete REGISTER_EXECUTE_FILE;
+  delete global.REGISTER_EXECUTE_FILE;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief cleans up after cancelation
@@ -977,7 +916,6 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   Package = function (id, description, parent, origin, isSystem) {
-    'use strict';
 
     this.id = id;			// name of the package
 
@@ -990,10 +928,10 @@ function require (path) {
 
     this._origin = origin;              // root of the package
     this._isSystem = isSystem;          // is a system package
+    this._isDbPackage = false;
   };
 
   (function () {
-    'use strict';
 
     var i;
     var pkg;
@@ -1006,10 +944,26 @@ function require (path) {
     }
 
     pkg = new Package("/", {}, undefined, "db://_modules/", false);
+    pkg._isDbPackage = true;
     globalPackages.push(pkg);
 
     systemPackage = new Package("/", { name: "ArangoDB system" }, undefined, "system:///", true);
   }());
+
+  Package.prototype.createAppModule = function (app, path) {
+    var libpath = fs.join(app._root, app._path);
+    if (app._manifest.hasOwnProperty("lib")) {
+      libpath = fs.join(libpath, app._manifest.lib);
+    }
+    return new Module(
+      "/application-module",
+      this,
+      app._context,
+      "/" + (path ? path : ""),
+      path2FileUri(libpath),
+      false
+    );
+  };
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                                   private methods
@@ -1020,18 +974,23 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   Package.prototype.defineSystemModule = function (path) {
-    'use strict';
 
     if (path[0] !== '/') {
-      throw new Error("path '" + path + "' must be absolute");
+      throw new internal.ArangoError({
+        errorNum: internal.errors.ERROR_MODULE_PATH_MUST_BE_ABSOLUTE.code,
+        errorMessage: internal.errors.ERROR_MODULE_PATH_MUST_BE_ABSOLUTE.message
+        + " Path: " + path
+      });
     }
 
-    return new Module(path,
-                      this,
-                      undefined,
-                      path,
-                      "system://" + path,
-                      true);
+    return new Module(
+      path,
+      this,
+      undefined,
+      path,
+      "system://" + path,
+      true
+    );
   };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1039,7 +998,6 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   Package.prototype._PRINT = function (context) {
-    'use strict';
 
     var parent = "";
 
@@ -1058,7 +1016,6 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   Package.prototype.defineModule = function (id, type, module) {
-    'use strict';
 
     var key = id + "." + type;
 
@@ -1072,7 +1029,6 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   Package.prototype.clearModule = function (id, type) {
-    'use strict';
 
     var key = id + "." + type;
 
@@ -1084,7 +1040,6 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   Package.prototype.module = function (id, type) {
-    'use strict';
 
     var key = id + "." + type;
 
@@ -1100,7 +1055,6 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   Package.prototype.definePackage = function (id, pkg) {
-    'use strict';
 
     this._packageCache[id] = pkg;
 
@@ -1112,7 +1066,6 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   Package.prototype.knownPackage = function (id) {
-    'use strict';
 
     if (this._packageCache.hasOwnProperty(id)) {
       return this._packageCache[id];
@@ -1134,7 +1087,6 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   Module = function (id, pkg, appContext, path, origin, isSystem) {
-    'use strict';
 
     this.id = id;                    // commonjs Module/1.1.1
     this.exports = {};               // commonjs Module/1.1.1
@@ -1146,6 +1098,10 @@ function require (path) {
     this._package = pkg;             // the package to which the module belongs
 
     this._applicationContext = appContext;
+
+    this.paths = [
+      this.appPath ? this.appPath() :'/'
+    ];   // node compatibility
   };
 
 // -----------------------------------------------------------------------------
@@ -1156,7 +1112,7 @@ function require (path) {
 /// @brief module "/"
 ////////////////////////////////////////////////////////////////////////////////
 
-  module = Module.prototype.root = systemPackage.defineSystemModule("/");
+  global.module = Module.prototype.root = systemPackage.defineSystemModule("/");
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief module "internal"
@@ -1165,20 +1121,18 @@ function require (path) {
   internal = systemPackage.defineSystemModule("/internal").exports;
 
   (function () {
-    'use strict';
-
     var key;
 
-    for (key in EXPORTS_SLOW_BUFFER) {
-      if (EXPORTS_SLOW_BUFFER.hasOwnProperty(key)) {
-        internal[key] = EXPORTS_SLOW_BUFFER[key];
+    for (key in global.EXPORTS_SLOW_BUFFER) {
+      if (global.EXPORTS_SLOW_BUFFER.hasOwnProperty(key)) {
+        internal[key] = global.EXPORTS_SLOW_BUFFER[key];
       }
     }
 
     internal.cleanupCancelation = cleanupCancelation;
   }());
 
-  delete EXPORTS_SLOW_BUFFER;
+  delete global.EXPORTS_SLOW_BUFFER;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief module "fs"
@@ -1201,8 +1155,6 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   Module.prototype._PRINT = function (context) {
-    'use strict';
-
     var type = "module";
 
     if (this._isSystem) {
@@ -1225,7 +1177,6 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   Module.prototype.require = function (path) {
-    'use strict';
 
     // special modules are returned immediately
     if (path === "internal") {
@@ -1260,14 +1211,11 @@ function require (path) {
 
     // try to generate a suitable error message
     if (localModule === null) {
-      var e = new Error("cannot locate module '" + path + "'");
-
-      e.moduleNotFound = true;
-      e._path = path;
-      e._package = this._package.id;
-      e._packageOrigin = this._package._origin;
-
-      throw e;
+      throw new internal.ArangoError({
+        errorNum: internal.errors.ERROR_MODULE_NOT_FOUND.code,
+        errorMessage: internal.errors.ERROR_MODULE_NOT_FOUND.message
+        + " Path: " + path
+      });
     }
 
     return localModule.exports;
@@ -1278,12 +1226,9 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   Module.prototype.basePaths = function () {
-    'use strict';
-
     if (appPath === undefined && devAppPath === undefined) {
       return undefined;
     }
-
     return {
       appPath: appPath,
       devAppPath: devAppPath
@@ -1295,12 +1240,9 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   Module.prototype.appPath = function () {
-    'use strict';
-
     if (appPath === undefined) {
       return undefined;
     }
-
     return fs.join(appPath, '_db', internal.db._name());
   };
 
@@ -1310,12 +1252,9 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   Module.prototype.oldAppPath = function () {
-    'use strict';
-
     if (appPath === undefined) {
       return undefined;
     }
-
     return fs.join(appPath, 'databases', internal.db._name());
   };
 
@@ -1324,12 +1263,9 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   Module.prototype.devAppPath = function () {
-    'use strict';
-
     if (devAppPath === undefined) {
       return undefined;
     }
-
     return fs.join(devAppPath, 'databases', internal.db._name());
   };
 
@@ -1338,8 +1274,6 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   Module.prototype.systemAppPath = function () {
-    'use strict';
-
     return fs.join(startupPath, 'apps', 'system');
   };
 
@@ -1348,8 +1282,6 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   Module.prototype.startupPath = function () {
-    'use strict';
-
     return startupPath;
   };
 
@@ -1358,7 +1290,6 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   Module.prototype.normalize = function (path) {
-    'use strict';
 
     // normalizeModuleName handles absolute and relative paths
     return normalizeModuleName(this._modulePath, path);
@@ -1369,49 +1300,129 @@ function require (path) {
 ////////////////////////////////////////////////////////////////////////////////
 
   Module.prototype.createTestEnvironment = function (path) {
-    var pkg = new Package("/test",
-                          { name: "ArangoDB test" },
-                          undefined,
-                          "file:///" + path,
-                          false);
+    var pkg = new Package(
+      "/test",
+      {name: "ArangoDB test"},
+      undefined,
+      "file:///" + path,
+      false
+    );
 
-    return new Module("/",
-                      pkg,
-                      undefined,
-                      "/",
-                      "system:///",
-                      false);
+    return new Module(
+      "/",
+      pkg,
+      undefined,
+      "/",
+      "system:///",
+      false
+    );
   };
 
 ////////////////////////////////////////////////////////////////////////////////
-/// @brief createAppModule, is used to create foxx applications
+/// @brief createAppPackage, is used to create foxx applications
 ////////////////////////////////////////////////////////////////////////////////
 
-  Module.prototype.createAppModule = function (app) {
-    'use strict';
+  Module.prototype.createAppPackage = function (app) {
     var libpath = fs.join(app._root, app._path);
     if (app._manifest.hasOwnProperty("lib")) {
       libpath = fs.join(libpath, app._manifest.lib);
     }
-    var pkg = new Package("application-package",
-                          {name: "application '" + app._name + "'"},
-                          undefined,
-                          path2FileUri(libpath),
-                          false);
-
-    pkg._environment = {
-      console: require("org/arangodb/foxx/console")(app._mount)
-    };
-
-    return new Module("/application-module",
-                      pkg,
-                      app._context,
-                      "/",
-                      path2FileUri(libpath),
-                      false);
+    return new Package(
+      "application-package",
+      {name: "application '" + app._name + "'"},
+      undefined,
+      path2FileUri(libpath),
+      false
+    );
   };
 
   Module.prototype.normalizeModuleName = normalizeModuleName;
+
+  Module.prototype.run = function(content, context) {
+    var filename = fileUri2Path(this._origin);
+
+    if (typeof content !== "string") {
+      throw new TypeError('Expected module content to be a string, not ' + typeof content);
+    }
+
+    // test for parse errors first and fail early if a parse error detected
+    if (!internal.parse(content)) {
+      throw new internal.ArangoError({
+        errorNum: internal.errors.ERROR_MODULE_SYNTAX_ERROR.code,
+        errorMessage: internal.errors.ERROR_MODULE_SYNTAX_ERROR.message
+        + " File: " + filename
+        + " Content: " + content
+      });
+    }
+
+    var self = this;
+    var args = {
+      print: internal.print,
+      module: this,
+      exports: this.exports,
+      require: function (path) {
+        return self.require(path);
+      }
+    };
+
+    if (filename !== null) {
+      args.__filename = filename;
+      args.__dirname = normalizeModuleName(filename + '/..');
+    }
+
+    if (context) {
+      Object.keys(context).forEach(function (key) {
+        args[key] = context[key];
+      });
+    }
+
+    var keys = Object.keys(args);
+    var script;
+
+    try {
+      script = Function.apply(null, keys.concat(content));
+    } catch (e) {
+      throw extend(new internal.ArangoError({
+        errorNum: internal.errors.ERROR_MODULE_BAD_WRAPPER.code,
+        errorMessage: internal.errors.ERROR_MODULE_BAD_WRAPPER.message
+        + " File: " + filename
+        + " Context variables: " + JSON.stringify(Object.keys(args))
+      }), {stack: e.stack});
+    }
+
+    var fn;
+
+    try {
+      fn = internal.executeScript("(" + script + ")", undefined, filename);
+    } catch (e) {
+      // This should never happen, right?
+      throw extend(new internal.ArangoError({
+        errorNum: internal.errors.ERROR_SYNTAX_ERROR_IN_SCRIPT.code,
+        errorMessage: internal.errors.ERROR_SYNTAX_ERROR_IN_SCRIPT.message
+        + " File: " + filename
+        + " Content: " + content
+      }), {stack: e.stack});
+    }
+
+    if (typeof fn !== 'function') {
+      throw new TypeError('Expected internal.executeScript to return a function, not ' + typeof fn);
+    }
+
+    try {
+      fn.apply(null, keys.map(function (key) {
+        return args[key];
+      }));
+    } catch (e) {
+      throw extend(new internal.ArangoError({
+        errorNum: internal.errors.ERROR_MODULE_FAILURE.code,
+        errorMessage: internal.errors.ERROR_MODULE_FAILURE.message
+        + " File: " + filename
+        + " Content: " + content
+      }), {stack: e.stack});
+    }
+
+    return this.exports;
+  };
 }());
 
 // -----------------------------------------------------------------------------

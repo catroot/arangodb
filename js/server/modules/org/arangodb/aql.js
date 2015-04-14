@@ -1,5 +1,5 @@
 /*jshint strict: false, unused: false, bitwise: false */
-/*global require, exports, COMPARE_STRING, AQL_TO_BOOL, AQL_TO_NUMBER, AQL_TO_STRING, AQL_WARNING, AQL_QUERY_SLEEP */
+/*global COMPARE_STRING, AQL_TO_BOOL, AQL_TO_NUMBER, AQL_TO_STRING, AQL_WARNING, AQL_QUERY_SLEEP */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief Ahuacatl, internal query functions
@@ -33,7 +33,6 @@ var TRAVERSAL = require("org/arangodb/graph/traversal");
 var ArangoError = require("org/arangodb").ArangoError;
 var ShapedJson = INTERNAL.ShapedJson;
 var isCoordinator = require("org/arangodb/cluster").isCoordinator();
-var console = require("console");
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                                 private variables
@@ -153,7 +152,7 @@ var TYPEWEIGHT_OBJECT    = 16;
 ////////////////////////////////////////////////////////////////////////////////
 
 function WARN (func, error, data) {
-  "use strict";
+  'use strict';
 
   if (error.code === INTERNAL.errors.ERROR_QUERY_FUNCTION_ARGUMENT_TYPE_MISMATCH.code) {
     AQL_WARNING(error.code, error.message.replace(/%s/, func)); 
@@ -178,7 +177,7 @@ function WARN (func, error, data) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function THROW (func, error, data) {
-  "use strict";
+  'use strict';
   
   var prefix = "";
   if (func !== null && func !== "") {
@@ -211,7 +210,7 @@ function DB_PREFIX () {
 ////////////////////////////////////////////////////////////////////////////////
 
 function resetRegexCache () {
-  "use strict";
+  'use strict';
 
   RegexCache = { 'i' : { }, '' : { } };
 }
@@ -221,7 +220,7 @@ function resetRegexCache () {
 ////////////////////////////////////////////////////////////////////////////////
 
 function reloadUserFunctions () {
-  "use strict";
+  'use strict';
 
   var prefix = DB_PREFIX();
   var c = INTERNAL.db._collection("_aqlfunctions");
@@ -378,7 +377,7 @@ function GET_EXPANDFILTER (name, config) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function NORMALIZE_FNAME (functionName) {
-  "use strict";
+  'use strict';
 
   var p = functionName.indexOf('::');
 
@@ -394,7 +393,7 @@ function NORMALIZE_FNAME (functionName) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function FILTER (list, examples) {
-  "use strict";
+  'use strict';
 
   var result = [ ], i;
 
@@ -418,7 +417,7 @@ function FILTER (list, examples) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function INDEX_FULLTEXT (collection, attribute) {
-  "use strict";
+  'use strict';
 
   var indexes = collection.getIndexes(), i;
 
@@ -437,7 +436,7 @@ function INDEX_FULLTEXT (collection, attribute) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function INDEX (collection, indexTypes) {
-  "use strict";
+  'use strict';
 
   var indexes = collection.getIndexes(), i, j;
 
@@ -459,7 +458,7 @@ function INDEX (collection, indexTypes) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function COLLECTION (name) {
-  "use strict";
+  'use strict';
 
   if (typeof name !== 'string') {
     THROW(null, INTERNAL.errors.ERROR_INTERNAL);
@@ -496,7 +495,7 @@ function TO_LIST (param, isStringHash) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function CLONE (obj) {
-  "use strict";
+  'use strict';
 
   if (obj === null || typeof(obj) !== "object" || obj instanceof ShapedJson) {
     return obj;
@@ -524,7 +523,7 @@ function CLONE (obj) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function FIX_VALUE (value) {
-  "use strict";
+  'use strict';
 
   if (value instanceof ShapedJson) {
     return value;
@@ -571,7 +570,7 @@ function FIX_VALUE (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function TYPEWEIGHT (value) {
-  "use strict";
+  'use strict';
 
   if (value !== undefined && value !== null) {
     if (Array.isArray(value)) {
@@ -602,7 +601,7 @@ function TYPEWEIGHT (value) {
 ////////////////////////////////////////////////////////////////////////////////
   
 function CREATE_REGEX_PATTERN (chars) {
-  "use strict";
+  'use strict';
 
   chars = AQL_TO_STRING(chars);
   var i, n = chars.length, pattern = '';
@@ -642,7 +641,7 @@ function CREATE_REGEX_PATTERN (chars) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function COMPILE_REGEX (regex, modifiers) {
-  "use strict";
+  'use strict';
 
   regex = AQL_TO_STRING(regex);
   var i, n = regex.length;
@@ -707,7 +706,7 @@ function COMPILE_REGEX (regex, modifiers) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function FCALL_USER (name, parameters) {
-  "use strict";
+  'use strict';
 
   var prefix = DB_PREFIX(), reloaded = false;
   if (! UserFunctions.hasOwnProperty(prefix)) {
@@ -813,7 +812,7 @@ function FCALL_DYNAMIC (func, applyDirect, values, name, args) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function NUMERIC_VALUE (value) {
-  "use strict";
+  'use strict';
 
   if (isNaN(value) || ! isFinite(value)) {
     return null;
@@ -827,7 +826,7 @@ function NUMERIC_VALUE (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function FIX (value) {
-  "use strict";
+  'use strict';
 
   if (value === undefined) {
     return null;
@@ -841,7 +840,7 @@ function FIX (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function VALUES (value) {
-  "use strict";
+  'use strict';
 
   var values = [ ];
 
@@ -857,7 +856,7 @@ function VALUES (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function EXTRACT_KEYS (args, startArgument, func) {
-  "use strict";
+  'use strict';
 
   var keys = { }, i, j, key, key2;
 
@@ -891,7 +890,7 @@ function EXTRACT_KEYS (args, startArgument, func) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function KEYS (value, doSort) {
-  "use strict";
+  'use strict';
 
   var keys;
 
@@ -920,7 +919,7 @@ function KEYS (value, doSort) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function KEYLIST (lhs, rhs) {
-  "use strict";
+  'use strict';
 
   if (Array.isArray(lhs)) {
     // lhs & rhs are lists
@@ -946,7 +945,7 @@ function KEYLIST (lhs, rhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function GET_INDEX (value, index) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(value) === TYPEWEIGHT_NULL) {
     return null;
@@ -983,7 +982,7 @@ function GET_INDEX (value, index) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function NORMALIZE (value) {
-  "use strict";
+  'use strict';
 
   if (value === null || value === undefined) {
     return null;
@@ -1016,7 +1015,7 @@ function NORMALIZE (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function DOCUMENT_MEMBER (value, attributeName) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(value) !== TYPEWEIGHT_OBJECT) {
     return null;
@@ -1036,7 +1035,7 @@ function DOCUMENT_MEMBER (value, attributeName) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function DOCUMENT_HANDLE (id) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(id) === TYPEWEIGHT_ARRAY) {
     var result = [ ], i;
@@ -1063,7 +1062,7 @@ function DOCUMENT_HANDLE (id) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_DOCUMENT (collection, id) {
-  "use strict";
+  'use strict';
 
   // we're polymorphic
   if (id === undefined) {
@@ -1102,7 +1101,7 @@ function AQL_DOCUMENT (collection, id) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function GET_DOCUMENTS (collection, offset, limit) {
-  "use strict";
+  'use strict';
 
   if (offset === undefined) {
     offset = 0;
@@ -1125,7 +1124,7 @@ function GET_DOCUMENTS (collection, offset, limit) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_COLLECTIONS () {
-  "use strict";
+  'use strict';
 
   var result = [ ];
 
@@ -1151,7 +1150,7 @@ function AQL_COLLECTIONS () {
 ////////////////////////////////////////////////////////////////////////////////
 
 function TERNARY_OPERATOR (condition, truePart, falsePart) {
-  "use strict";
+  'use strict';
 
   if (condition) {
     return truePart();
@@ -1167,7 +1166,7 @@ function TERNARY_OPERATOR (condition, truePart, falsePart) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function LOGICAL_AND (lhs, rhs) {
-  "use strict";
+  'use strict';
 
   var l = lhs();
 
@@ -1186,7 +1185,7 @@ function LOGICAL_AND (lhs, rhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function LOGICAL_OR (lhs, rhs) {
-  "use strict";
+  'use strict';
 
   var l = lhs();
 
@@ -1204,7 +1203,7 @@ function LOGICAL_OR (lhs, rhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function LOGICAL_NOT (lhs) {
-  "use strict";
+  'use strict';
 
   return ! AQL_TO_BOOL(lhs);
 }
@@ -1220,7 +1219,7 @@ function LOGICAL_NOT (lhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function RELATIONAL_EQUAL (lhs, rhs) {
-  "use strict";
+  'use strict';
 
   var leftWeight = TYPEWEIGHT(lhs);
   var rightWeight = TYPEWEIGHT(rhs);
@@ -1262,7 +1261,7 @@ function RELATIONAL_EQUAL (lhs, rhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function RELATIONAL_UNEQUAL (lhs, rhs) {
-  "use strict";
+  'use strict';
 
   var leftWeight = TYPEWEIGHT(lhs);
   var rightWeight = TYPEWEIGHT(rhs);
@@ -1303,7 +1302,7 @@ function RELATIONAL_UNEQUAL (lhs, rhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function RELATIONAL_GREATER_REC (lhs, rhs) {
-  "use strict";
+  'use strict';
 
   var leftWeight = TYPEWEIGHT(lhs);
   var rightWeight = TYPEWEIGHT(rhs);
@@ -1353,7 +1352,7 @@ function RELATIONAL_GREATER_REC (lhs, rhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function RELATIONAL_GREATER (lhs, rhs) {
-  "use strict";
+  'use strict';
 
   var result = RELATIONAL_GREATER_REC(lhs, rhs);
 
@@ -1369,7 +1368,7 @@ function RELATIONAL_GREATER (lhs, rhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function RELATIONAL_GREATEREQUAL_REC (lhs, rhs) {
-  "use strict";
+  'use strict';
 
   var leftWeight = TYPEWEIGHT(lhs);
   var rightWeight = TYPEWEIGHT(rhs);
@@ -1419,7 +1418,7 @@ function RELATIONAL_GREATEREQUAL_REC (lhs, rhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function RELATIONAL_GREATEREQUAL (lhs, rhs) {
-  "use strict";
+  'use strict';
 
   var result = RELATIONAL_GREATEREQUAL_REC(lhs, rhs);
 
@@ -1435,7 +1434,7 @@ function RELATIONAL_GREATEREQUAL (lhs, rhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function RELATIONAL_LESS_REC (lhs, rhs) {
-  "use strict";
+  'use strict';
 
   var leftWeight = TYPEWEIGHT(lhs);
   var rightWeight = TYPEWEIGHT(rhs);
@@ -1485,7 +1484,7 @@ function RELATIONAL_LESS_REC (lhs, rhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function RELATIONAL_LESS (lhs, rhs) {
-  "use strict";
+  'use strict';
 
   var result = RELATIONAL_LESS_REC(lhs, rhs);
 
@@ -1501,7 +1500,7 @@ function RELATIONAL_LESS (lhs, rhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function RELATIONAL_LESSEQUAL_REC (lhs, rhs) {
-  "use strict";
+  'use strict';
 
   var leftWeight = TYPEWEIGHT(lhs);
   var rightWeight = TYPEWEIGHT(rhs);
@@ -1551,7 +1550,7 @@ function RELATIONAL_LESSEQUAL_REC (lhs, rhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function RELATIONAL_LESSEQUAL (lhs, rhs) {
-  "use strict";
+  'use strict';
 
   var result = RELATIONAL_LESSEQUAL_REC(lhs, rhs);
 
@@ -1570,7 +1569,7 @@ function RELATIONAL_LESSEQUAL (lhs, rhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function RELATIONAL_CMP (lhs, rhs) {
-  "use strict";
+  'use strict';
 
   var leftWeight = TYPEWEIGHT(lhs);
   var rightWeight = TYPEWEIGHT(rhs);
@@ -1624,7 +1623,7 @@ function RELATIONAL_CMP (lhs, rhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function RELATIONAL_IN (lhs, rhs) {
-  "use strict";
+  'use strict';
 
   var rightWeight = TYPEWEIGHT(rhs);
 
@@ -1650,7 +1649,7 @@ function RELATIONAL_IN (lhs, rhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function RELATIONAL_NOT_IN (lhs, rhs) {
-  "use strict";
+  'use strict';
 
   return ! RELATIONAL_IN(lhs, rhs);
 }
@@ -1664,7 +1663,7 @@ function RELATIONAL_NOT_IN (lhs, rhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function UNARY_PLUS (value) {
-  "use strict";
+  'use strict';
 
   value = AQL_TO_NUMBER(value);
   if (value === null) {
@@ -1678,7 +1677,7 @@ function UNARY_PLUS (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function UNARY_MINUS (value) {
-  "use strict";
+  'use strict';
 
   value = AQL_TO_NUMBER(value);
   if (value === null) {
@@ -1693,7 +1692,7 @@ function UNARY_MINUS (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function ARITHMETIC_PLUS (lhs, rhs) {
-  "use strict";
+  'use strict';
 
   lhs = AQL_TO_NUMBER(lhs);
   if (lhs === null) {
@@ -1713,7 +1712,7 @@ function ARITHMETIC_PLUS (lhs, rhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function ARITHMETIC_MINUS (lhs, rhs) {
-  "use strict";
+  'use strict';
   
   lhs = AQL_TO_NUMBER(lhs);
   if (lhs === null) {
@@ -1733,7 +1732,7 @@ function ARITHMETIC_MINUS (lhs, rhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function ARITHMETIC_TIMES (lhs, rhs) {
-  "use strict";
+  'use strict';
   
   lhs = AQL_TO_NUMBER(lhs);
   if (lhs === null) {
@@ -1753,7 +1752,7 @@ function ARITHMETIC_TIMES (lhs, rhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function ARITHMETIC_DIVIDE (lhs, rhs) {
-  "use strict";
+  'use strict';
 
   lhs = AQL_TO_NUMBER(lhs);
   if (lhs === null) {
@@ -1774,7 +1773,7 @@ function ARITHMETIC_DIVIDE (lhs, rhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function ARITHMETIC_MODULUS (lhs, rhs) {
-  "use strict";
+  'use strict';
 
   lhs = AQL_TO_NUMBER(lhs);
   if (lhs === null) {
@@ -1799,7 +1798,7 @@ function ARITHMETIC_MODULUS (lhs, rhs) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_CONCAT () {
-  "use strict";
+  'use strict';
 
   var result = '', i, j;
 
@@ -1829,7 +1828,7 @@ function AQL_CONCAT () {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_CONCAT_SEPARATOR () {
-  "use strict";
+  'use strict';
 
   var separator, found = false, result = '', i, j;
 
@@ -1875,7 +1874,7 @@ function AQL_CONCAT_SEPARATOR () {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_CHAR_LENGTH (value) {
-  "use strict";
+  'use strict';
 
   return AQL_TO_STRING(value).length;
 }
@@ -1885,7 +1884,7 @@ function AQL_CHAR_LENGTH (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_LOWER (value) {
-  "use strict";
+  'use strict';
 
   return AQL_TO_STRING(value).toLowerCase();
 }
@@ -1895,7 +1894,7 @@ function AQL_LOWER (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_UPPER (value) {
-  "use strict";
+  'use strict';
 
   return AQL_TO_STRING(value).toUpperCase();
 }
@@ -1905,7 +1904,7 @@ function AQL_UPPER (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_SUBSTRING (value, offset, count) {
-  "use strict";
+  'use strict';
 
   if (count !== undefined) {
     count = AQL_TO_NUMBER(count);
@@ -1919,7 +1918,7 @@ function AQL_SUBSTRING (value, offset, count) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_CONTAINS (value, search, returnIndex) {
-  "use strict";
+  'use strict';
 
   search = AQL_TO_STRING(search);
 
@@ -1943,7 +1942,7 @@ function AQL_CONTAINS (value, search, returnIndex) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_LIKE (value, regex, caseInsensitive) {
-  "use strict";
+  'use strict';
 
   var modifiers = '';
   if (caseInsensitive) {
@@ -1970,7 +1969,7 @@ function AQL_LIKE (value, regex, caseInsensitive) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_LEFT (value, length) {
-  "use strict";
+  'use strict';
 
   return AQL_TO_STRING(value).substr(0, AQL_TO_NUMBER(length));
 }
@@ -1980,7 +1979,7 @@ function AQL_LEFT (value, length) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_RIGHT (value, length) {
-  "use strict";
+  'use strict';
 
   value = AQL_TO_STRING(value);
   length = AQL_TO_NUMBER(length);
@@ -1998,7 +1997,7 @@ function AQL_RIGHT (value, length) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_TRIM (value, chars) {
-  "use strict";
+  'use strict';
 
   if (chars === 1) {
     return AQL_LTRIM(value);
@@ -2019,7 +2018,7 @@ function AQL_TRIM (value, chars) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_LTRIM (value, chars) {
-  "use strict";
+  'use strict';
 
   if (chars === null || chars === undefined) {
     chars = "^\\s+";
@@ -2036,7 +2035,7 @@ function AQL_LTRIM (value, chars) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_RTRIM (value, chars) {
-  "use strict";
+  'use strict';
 
   if (chars === null || chars === undefined) {
     chars = "\\s+$";
@@ -2053,7 +2052,7 @@ function AQL_RTRIM (value, chars) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_SPLIT (value, separator, limit) {
-  "use strict";
+  'use strict';
 
   if (separator === null || separator === undefined) {
     return [ AQL_TO_STRING(value) ];
@@ -2088,7 +2087,7 @@ function AQL_SPLIT (value, separator, limit) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_SUBSTITUTE (value, search, replace, limit) {
-  "use strict";
+  'use strict';
 
   var pattern, patterns, replacements = { }, sWeight = TYPEWEIGHT(search);
   value = AQL_TO_STRING(value);
@@ -2179,7 +2178,7 @@ function AQL_SUBSTITUTE (value, search, replace, limit) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_MD5 (value) {
-  "use strict";
+  'use strict';
 
   return INTERNAL.md5(AQL_TO_STRING(value));
 }
@@ -2189,7 +2188,7 @@ function AQL_MD5 (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_SHA1 (value) {
-  "use strict";
+  'use strict';
 
   return INTERNAL.sha1(AQL_TO_STRING(value));
 }
@@ -2199,7 +2198,7 @@ function AQL_SHA1 (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_RANDOM_TOKEN (length) {
-  "use strict";
+  'use strict';
 
   length = AQL_TO_NUMBER(length);
 
@@ -2215,7 +2214,7 @@ function AQL_RANDOM_TOKEN (length) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_FIND_FIRST (value, search, start, end) {
-  "use strict";
+  'use strict';
 
   if (start !== undefined && start !== null) {
     start = AQL_TO_NUMBER(start);
@@ -2249,7 +2248,7 @@ function AQL_FIND_FIRST (value, search, start, end) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_FIND_LAST (value, search, start, end) {
-  "use strict";
+  'use strict';
 
   if (start !== undefined && start !== null) {
     start = AQL_TO_NUMBER(start);
@@ -2297,7 +2296,7 @@ function AQL_FIND_LAST (value, search, start, end) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_TO_BOOL (value) {
-  "use strict";
+  'use strict';
 
   switch (TYPEWEIGHT(value)) {
     case TYPEWEIGHT_NULL:
@@ -2321,7 +2320,7 @@ function AQL_TO_BOOL (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_TO_NUMBER (value) {
-  "use strict";
+  'use strict';
 
   if (value === undefined) {
     return null;
@@ -2360,7 +2359,7 @@ function AQL_TO_NUMBER (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_TO_STRING (value) {
-  "use strict";
+  'use strict';
 
   switch (TYPEWEIGHT(value)) {
     case TYPEWEIGHT_NULL:
@@ -2383,7 +2382,7 @@ function AQL_TO_STRING (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_TO_ARRAY (value) {
-  "use strict";
+  'use strict';
 
   switch (TYPEWEIGHT(value)) {
     case TYPEWEIGHT_NULL:
@@ -2410,7 +2409,7 @@ function AQL_TO_ARRAY (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_IS_NULL (value) {
-  "use strict";
+  'use strict';
 
   return (TYPEWEIGHT(value) === TYPEWEIGHT_NULL);
 }
@@ -2422,7 +2421,7 @@ function AQL_IS_NULL (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_IS_BOOL (value) {
-  "use strict";
+  'use strict';
 
   return (TYPEWEIGHT(value) === TYPEWEIGHT_BOOL);
 }
@@ -2434,7 +2433,7 @@ function AQL_IS_BOOL (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_IS_NUMBER (value) {
-  "use strict";
+  'use strict';
 
   return (TYPEWEIGHT(value) === TYPEWEIGHT_NUMBER);
 }
@@ -2446,7 +2445,7 @@ function AQL_IS_NUMBER (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_IS_STRING (value) {
-  "use strict";
+  'use strict';
 
   return (TYPEWEIGHT(value) === TYPEWEIGHT_STRING);
 }
@@ -2458,7 +2457,7 @@ function AQL_IS_STRING (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_IS_ARRAY (value) {
-  "use strict";
+  'use strict';
 
   return (TYPEWEIGHT(value) === TYPEWEIGHT_ARRAY);
 }
@@ -2470,7 +2469,7 @@ function AQL_IS_ARRAY (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_IS_OBJECT (value) {
-  "use strict";
+  'use strict';
 
   return (TYPEWEIGHT(value) === TYPEWEIGHT_OBJECT);
 }
@@ -2484,7 +2483,7 @@ function AQL_IS_OBJECT (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_FLOOR (value) {
-  "use strict";
+  'use strict';
 
   return NUMERIC_VALUE(Math.floor(AQL_TO_NUMBER(value)));
 }
@@ -2494,7 +2493,7 @@ function AQL_FLOOR (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_CEIL (value) {
-  "use strict";
+  'use strict';
 
   return NUMERIC_VALUE(Math.ceil(AQL_TO_NUMBER(value)));
 }
@@ -2504,7 +2503,7 @@ function AQL_CEIL (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_ROUND (value) {
-  "use strict";
+  'use strict';
 
   return NUMERIC_VALUE(Math.round(AQL_TO_NUMBER(value)));
 }
@@ -2514,7 +2513,7 @@ function AQL_ROUND (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_ABS (value) {
-  "use strict";
+  'use strict';
 
   return NUMERIC_VALUE(Math.abs(AQL_TO_NUMBER(value)));
 }
@@ -2524,7 +2523,7 @@ function AQL_ABS (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_RAND () {
-  "use strict";
+  'use strict';
 
   return Math.random();
 }
@@ -2534,7 +2533,7 @@ function AQL_RAND () {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_SQRT (value) {
-  "use strict";
+  'use strict';
 
   return NUMERIC_VALUE(Math.sqrt(AQL_TO_NUMBER(value)));
 }
@@ -2548,15 +2547,21 @@ function AQL_SQRT (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_LENGTH (value) {
-  "use strict";
+  'use strict';
 
-  var result, typeWeight = TYPEWEIGHT(value);
+  var typeWeight = TYPEWEIGHT(value);
 
   if (typeWeight === TYPEWEIGHT_ARRAY) {
     return value.length;
   }
   else if (typeWeight === TYPEWEIGHT_OBJECT) {
     return KEYS(value, false).length;
+  }
+  else if (typeWeight === TYPEWEIGHT_NULL) {
+    return 0;
+  }
+  else if (typeWeight === TYPEWEIGHT_BOOL) {
+    return value ? 1 : 0;
   }
 
   return AQL_TO_STRING(value).length;
@@ -2567,7 +2572,7 @@ function AQL_LENGTH (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_FIRST (value) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(value) !== TYPEWEIGHT_ARRAY) {
     WARN("FIRST", INTERNAL.errors.ERROR_QUERY_ARRAY_EXPECTED);
@@ -2586,7 +2591,7 @@ function AQL_FIRST (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_LAST (value) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(value) !== TYPEWEIGHT_ARRAY) {
     WARN("LAST", INTERNAL.errors.ERROR_QUERY_ARRAY_EXPECTED);
@@ -2605,7 +2610,7 @@ function AQL_LAST (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_POSITION (value, search, returnIndex) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(value) !== TYPEWEIGHT_ARRAY) {
     WARN("POSITION", INTERNAL.errors.ERROR_QUERY_ARRAY_EXPECTED);
@@ -2632,7 +2637,7 @@ function AQL_POSITION (value, search, returnIndex) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_NTH (value, position) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(value) !== TYPEWEIGHT_ARRAY) {
     WARN("NTH", INTERNAL.errors.ERROR_QUERY_ARRAY_EXPECTED);
@@ -2652,7 +2657,7 @@ function AQL_NTH (value, position) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_REVERSE (value) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(value) === TYPEWEIGHT_STRING) {
     return value.split("").reverse().join("");
@@ -2671,7 +2676,7 @@ function AQL_REVERSE (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_RANGE (from, to, step) {
-  "use strict";
+  'use strict';
 
   from = AQL_TO_NUMBER(from);
   to = AQL_TO_NUMBER(to);
@@ -2721,7 +2726,7 @@ function AQL_RANGE (from, to, step) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_UNIQUE (values) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(values) !== TYPEWEIGHT_ARRAY) {
     WARN("UNIQUE", INTERNAL.errors.ERROR_QUERY_ARRAY_EXPECTED);
@@ -2751,7 +2756,7 @@ function AQL_UNIQUE (values) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_UNION () {
-  "use strict";
+  'use strict';
 
   var result = [ ], i;
 
@@ -2780,7 +2785,7 @@ function AQL_UNION () {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_UNION_DISTINCT () {
-  "use strict";
+  'use strict';
 
   var keys = { }, i;
 
@@ -2819,7 +2824,7 @@ function AQL_UNION_DISTINCT () {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_CALL (values, name) {
-  "use strict";
+  'use strict';
 
   var args = [ null ], i;
   for (i = 2; i < arguments.length; ++i) {
@@ -2834,7 +2839,7 @@ function AQL_CALL (values, name) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_APPLY (values, name, parameters) {
-  "use strict";
+  'use strict';
 
   var args = [ null ], i;
   if (Array.isArray(parameters)) {
@@ -2849,7 +2854,7 @@ function AQL_APPLY (values, name, parameters) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_CALL (name) {
-  "use strict";
+  'use strict';
 
   var args = [ ], i;
   for (i = 1; i < arguments.length; ++i) {
@@ -2864,7 +2869,7 @@ function AQL_CALL (name) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_APPLY (name, parameters) {
-  "use strict";
+  'use strict';
 
   var args = [ ], i;
   if (Array.isArray(parameters)) {
@@ -2879,7 +2884,7 @@ function AQL_APPLY (name, parameters) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_REMOVE_VALUES (list, values) {
-  "use strict";
+  'use strict';
 
   var type = TYPEWEIGHT(values);
   if (type === TYPEWEIGHT_NULL) {
@@ -2914,7 +2919,7 @@ function AQL_REMOVE_VALUES (list, values) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_REMOVE_VALUE (list, value, limit) {
-  "use strict";
+  'use strict';
 
   var type = TYPEWEIGHT(list);
   if (type === TYPEWEIGHT_NULL) {
@@ -2948,7 +2953,7 @@ function AQL_REMOVE_VALUE (list, value, limit) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_REMOVE_NTH (list, position) {
-  "use strict";
+  'use strict';
 
   var type = TYPEWEIGHT(list);
   if (type === TYPEWEIGHT_NULL) {
@@ -2984,7 +2989,7 @@ function AQL_REMOVE_NTH (list, position) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_PUSH (list, value, unique) {
-  "use strict";
+  'use strict';
 
   var type = TYPEWEIGHT(list);
   if (type === TYPEWEIGHT_NULL) {
@@ -3011,7 +3016,7 @@ function AQL_PUSH (list, value, unique) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_APPEND (list, values, unique) {
-  "use strict";
+  'use strict';
 
   var type = TYPEWEIGHT(values);
   if (type === TYPEWEIGHT_NULL) {
@@ -3059,7 +3064,7 @@ function AQL_APPEND (list, values, unique) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_POP (list) {
-  "use strict";
+  'use strict';
 
   var type = TYPEWEIGHT(list);
   if (type === TYPEWEIGHT_NULL) {
@@ -3084,7 +3089,7 @@ function AQL_POP (list) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_UNSHIFT (list, value, unique) {
-  "use strict";
+  'use strict';
 
   var type = TYPEWEIGHT(list);
   if (type === TYPEWEIGHT_NULL) {
@@ -3110,7 +3115,7 @@ function AQL_UNSHIFT (list, value, unique) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_SHIFT (list) {
-  "use strict";
+  'use strict';
 
   var type = TYPEWEIGHT(list);
   if (type === TYPEWEIGHT_NULL) {
@@ -3135,7 +3140,7 @@ function AQL_SHIFT (list) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_SLICE (value, from, to) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(value) !== TYPEWEIGHT_ARRAY) {
     WARN("SLICE", INTERNAL.errors.ERROR_QUERY_FUNCTION_ARGUMENT_TYPE_MISMATCH);
@@ -3162,7 +3167,7 @@ function AQL_SLICE (value, from, to) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_MINUS () {
-  "use strict";
+  'use strict';
 
   var keys = { }, i, first = true;
 
@@ -3209,7 +3214,7 @@ function AQL_MINUS () {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_INTERSECTION () {
-  "use strict";
+  'use strict';
 
   var result = [ ], i, first = true, keys = { };
 
@@ -3260,7 +3265,7 @@ function AQL_INTERSECTION () {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_FLATTEN (values, maxDepth, depth) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(values) !== TYPEWEIGHT_ARRAY) {
     WARN("FLATTEN", INTERNAL.errors.ERROR_QUERY_ARRAY_EXPECTED);
@@ -3300,7 +3305,7 @@ function AQL_FLATTEN (values, maxDepth, depth) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_MAX (values) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(values) !== TYPEWEIGHT_ARRAY) {
     WARN("MAX", INTERNAL.errors.ERROR_QUERY_ARRAY_EXPECTED);
@@ -3327,7 +3332,7 @@ function AQL_MAX (values) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_MIN (values) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(values) !== TYPEWEIGHT_ARRAY) {
     WARN("MIN", INTERNAL.errors.ERROR_QUERY_ARRAY_EXPECTED);
@@ -3354,7 +3359,7 @@ function AQL_MIN (values) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_SUM (values) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(values) !== TYPEWEIGHT_ARRAY) {
     WARN("SUM", INTERNAL.errors.ERROR_QUERY_ARRAY_EXPECTED);
@@ -3385,7 +3390,7 @@ function AQL_SUM (values) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_AVERAGE (values) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(values) !== TYPEWEIGHT_ARRAY) {
     WARN("AVERAGE", INTERNAL.errors.ERROR_QUERY_ARRAY_EXPECTED);
@@ -3422,7 +3427,7 @@ function AQL_AVERAGE (values) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_MEDIAN (values) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(values) !== TYPEWEIGHT_ARRAY) {
     WARN("MEDIAN", INTERNAL.errors.ERROR_QUERY_ARRAY_EXPECTED);
@@ -3465,7 +3470,7 @@ function AQL_MEDIAN (values) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_PERCENTILE (values, p, method) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(values) !== TYPEWEIGHT_ARRAY) {
     WARN("PERCENTILE", INTERNAL.errors.ERROR_QUERY_ARRAY_EXPECTED);
@@ -3546,7 +3551,7 @@ function AQL_PERCENTILE (values, p, method) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function VARIANCE (values) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(values) !== TYPEWEIGHT_ARRAY) {
     WARN("VARIANCE", INTERNAL.errors.ERROR_QUERY_ARRAY_EXPECTED);
@@ -3583,7 +3588,7 @@ function VARIANCE (values) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_VARIANCE_SAMPLE (values) {
-  "use strict";
+  'use strict';
 
   var result = VARIANCE(values);
   if (result === null || result === undefined) {
@@ -3602,7 +3607,7 @@ function AQL_VARIANCE_SAMPLE (values) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_VARIANCE_POPULATION (values) {
-  "use strict";
+  'use strict';
 
   var result = VARIANCE(values);
   if (result === null || result === undefined) {
@@ -3621,7 +3626,7 @@ function AQL_VARIANCE_POPULATION (values) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_STDDEV_SAMPLE (values) {
-  "use strict";
+  'use strict';
 
   var result = VARIANCE(values);
   if (result === null || result === undefined) {
@@ -3640,7 +3645,7 @@ function AQL_STDDEV_SAMPLE (values) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_STDDEV_POPULATION (values) {
-  "use strict";
+  'use strict';
 
   var result = VARIANCE(values);
   if (result === null || result === undefined) {
@@ -3663,7 +3668,7 @@ function AQL_STDDEV_POPULATION (values) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_NEAR (collection, latitude, longitude, limit, distanceAttribute) {
-  "use strict";
+  'use strict';
 
   if (limit === null || limit === undefined) {
     // use default value
@@ -3714,7 +3719,7 @@ function AQL_NEAR (collection, latitude, longitude, limit, distanceAttribute) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_WITHIN (collection, latitude, longitude, radius, distanceAttribute) {
-  "use strict";
+  'use strict';
 
   var weight = TYPEWEIGHT(distanceAttribute);
   if (weight !== TYPEWEIGHT_NULL && weight !== TYPEWEIGHT_STRING) {
@@ -3755,7 +3760,7 @@ function AQL_WITHIN (collection, latitude, longitude, radius, distanceAttribute)
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_WITHIN_RECTANGLE (collection, latitude1, longitude1, latitude2, longitude2) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(latitude1) !== TYPEWEIGHT_NUMBER ||
       TYPEWEIGHT(longitude1) !== TYPEWEIGHT_NUMBER ||
@@ -3773,7 +3778,7 @@ function AQL_WITHIN_RECTANGLE (collection, latitude1, longitude1, latitude2, lon
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_IS_IN_POLYGON (points, latitude, longitude) {
-  "use strict";
+  'use strict';
   
   if (TYPEWEIGHT(points) !== TYPEWEIGHT_ARRAY) {
     WARN("POINT_IN_POLYGON", INTERNAL.errors.ERROR_QUERY_ARRAY_EXPECTED);
@@ -3845,7 +3850,7 @@ function AQL_IS_IN_POLYGON (points, latitude, longitude) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_FULLTEXT (collection, attribute, query) {
-  "use strict";
+  'use strict';
 
   var idx = INDEX_FULLTEXT(COLLECTION(collection), attribute);
 
@@ -3873,7 +3878,7 @@ function AQL_FULLTEXT (collection, attribute, query) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_NOT_NULL () {
-  "use strict";
+  'use strict';
 
   var i;
   for (i in arguments) {
@@ -3898,7 +3903,7 @@ function AQL_NOT_NULL () {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_FIRST_LIST () {
-  "use strict";
+  'use strict';
 
   var i;
   for (i in arguments) {
@@ -3923,7 +3928,7 @@ function AQL_FIRST_LIST () {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_FIRST_DOCUMENT () {
-  "use strict";
+  'use strict';
 
   var i;
   for (i in arguments) {
@@ -3947,7 +3952,7 @@ function AQL_FIRST_DOCUMENT () {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_PARSE_IDENTIFIER (value) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(value) === TYPEWEIGHT_STRING) {
     var parts = value.split('/');
@@ -3978,7 +3983,7 @@ function AQL_PARSE_IDENTIFIER (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_SKIPLIST (collection, condition, skip, limit) {
-  "use strict";
+  'use strict';
 
   var keys = [ ], key, idx;
 
@@ -4025,7 +4030,7 @@ function AQL_SKIPLIST (collection, condition, skip, limit) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_HAS (element, name) {
-  "use strict";
+  'use strict';
  
   if (TYPEWEIGHT(element) !== TYPEWEIGHT_OBJECT) {
     return false;
@@ -4039,7 +4044,7 @@ function AQL_HAS (element, name) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_ATTRIBUTES (element, removeInternal, sort) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(element) !== TYPEWEIGHT_OBJECT) {
     WARN("ATTRIBUTES", INTERNAL.errors.ERROR_QUERY_FUNCTION_ARGUMENT_TYPE_MISMATCH);
@@ -4070,7 +4075,7 @@ function AQL_ATTRIBUTES (element, removeInternal, sort) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_VALUES (element, removeInternal) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(element) !== TYPEWEIGHT_OBJECT) {
     WARN("VALUES", INTERNAL.errors.ERROR_QUERY_FUNCTION_ARGUMENT_TYPE_MISMATCH);
@@ -4095,7 +4100,7 @@ function AQL_VALUES (element, removeInternal) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_ZIP (keys, values) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(keys) !== TYPEWEIGHT_ARRAY ||
       TYPEWEIGHT(values) !== TYPEWEIGHT_ARRAY ||
@@ -4118,7 +4123,7 @@ function AQL_ZIP (keys, values) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_UNSET (value) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(value) !== TYPEWEIGHT_OBJECT) {
     WARN("UNSET", INTERNAL.errors.ERROR_QUERY_FUNCTION_ARGUMENT_TYPE_MISMATCH);
@@ -4142,7 +4147,7 @@ function AQL_UNSET (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_KEEP (value) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(value) !== TYPEWEIGHT_OBJECT) {
     WARN("KEEP", INTERNAL.errors.ERROR_QUERY_FUNCTION_ARGUMENT_TYPE_MISMATCH);
@@ -4166,7 +4171,7 @@ function AQL_KEEP (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_MERGE () {
-  "use strict";
+  'use strict';
 
   var result = { }, i;
 
@@ -4198,7 +4203,7 @@ function AQL_MERGE () {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_MERGE_RECURSIVE () {
-  "use strict";
+  'use strict';
 
   var result = { }, i, recurse;
 
@@ -4238,7 +4243,7 @@ function AQL_MERGE_RECURSIVE () {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_TRANSLATE (value, lookup, defaultValue) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(lookup) !== TYPEWEIGHT_OBJECT) {
     WARN("TRANSLATE", INTERNAL.errors.ERROR_QUERY_FUNCTION_ARGUMENT_TYPE_MISMATCH);
@@ -4264,7 +4269,7 @@ function AQL_TRANSLATE (value, lookup, defaultValue) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_MATCHES (element, examples, returnIndex) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(element) !== TYPEWEIGHT_OBJECT) {
     return false;
@@ -4315,7 +4320,7 @@ function AQL_MATCHES (element, examples, returnIndex) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_PASSTHRU (value) {
-  "use strict";
+  'use strict';
 
   return value;
 }
@@ -4327,7 +4332,7 @@ function AQL_PASSTHRU (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_SLEEP (duration) {
-  "use strict";
+  'use strict';
 
   duration = AQL_TO_NUMBER(duration);
   if (TYPEWEIGHT(duration) !== TYPEWEIGHT_NUMBER || duration < 0) {
@@ -4346,7 +4351,7 @@ function AQL_SLEEP (duration) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_CURRENT_USER () {
-  "use strict";
+  'use strict';
 
   if (INTERNAL.getCurrentRequest) {
     var req = INTERNAL.getCurrentRequest();
@@ -4365,7 +4370,7 @@ function AQL_CURRENT_USER () {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_CURRENT_DATABASE () {
-  "use strict";
+  'use strict';
 
   return INTERNAL.db._name();
 }
@@ -4378,7 +4383,7 @@ function AQL_CURRENT_DATABASE () {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_FAIL (message) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(message) === TYPEWEIGHT_STRING) {
     THROW("FAIL", INTERNAL.errors.ERROR_QUERY_FAIL_CALLED, message);
@@ -4396,7 +4401,7 @@ function AQL_FAIL (message) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function MAKE_DATE (args, func) {
-  "use strict";
+  'use strict';
 
   var weight;
   var i, n = args.length;
@@ -4468,7 +4473,7 @@ function MAKE_DATE (args, func) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_DATE_NOW () {
-  "use strict";
+  'use strict';
 
   return Date.now();
 }
@@ -4478,7 +4483,7 @@ function AQL_DATE_NOW () {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_DATE_TIMESTAMP () {
-  "use strict";
+  'use strict';
 
   try {
     return MAKE_DATE(arguments, "DATE_TIMESTAMP").getTime();
@@ -4494,7 +4499,7 @@ function AQL_DATE_TIMESTAMP () {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_DATE_ISO8601 () {
-  "use strict";
+  'use strict';
 
   try {
     return MAKE_DATE(arguments, "DATE_ISO8601").toISOString();
@@ -4510,7 +4515,7 @@ function AQL_DATE_ISO8601 () {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_DATE_DAYOFWEEK (value) {
-  "use strict";
+  'use strict';
 
   try {
     return MAKE_DATE([ value ], "DATE_DAYOFWEEK").getUTCDay();
@@ -4526,7 +4531,7 @@ function AQL_DATE_DAYOFWEEK (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_DATE_YEAR (value) {
-  "use strict";
+  'use strict';
 
   try {
     return MAKE_DATE([ value ], "DATE_YEAR").getUTCFullYear();
@@ -4542,7 +4547,7 @@ function AQL_DATE_YEAR (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_DATE_MONTH (value) {
-  "use strict";
+  'use strict';
 
   try {
     return MAKE_DATE([ value ], "DATE_MONTH").getUTCMonth() + 1;
@@ -4558,7 +4563,7 @@ function AQL_DATE_MONTH (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_DATE_DAY (value) {
-  "use strict";
+  'use strict';
 
   try {
     return MAKE_DATE([ value ], "DATE_DAY").getUTCDate();
@@ -4574,7 +4579,7 @@ function AQL_DATE_DAY (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_DATE_HOUR (value) {
-  "use strict";
+  'use strict';
 
   try {
     return MAKE_DATE([ value ], "DATE_HOUR").getUTCHours();
@@ -4590,7 +4595,7 @@ function AQL_DATE_HOUR (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_DATE_MINUTE (value) {
-  "use strict";
+  'use strict';
 
   try {
     return MAKE_DATE([ value ], "DATE_MINUTE").getUTCMinutes();
@@ -4606,7 +4611,7 @@ function AQL_DATE_MINUTE (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_DATE_SECOND (value) {
-  "use strict";
+  'use strict';
 
   try {
     return MAKE_DATE([ value ], "DATE_SECOND").getUTCSeconds();
@@ -4622,7 +4627,7 @@ function AQL_DATE_SECOND (value) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_DATE_MILLISECOND (value) {
-  "use strict";
+  'use strict';
 
   try {
     return MAKE_DATE([ value ], "DATE_MILLISECOND").getUTCMilliseconds();
@@ -4667,7 +4672,7 @@ function GET_SUB_EDGES (edgeCollections, direction, vertexId) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function SUBNODES (searchAttributes, vertexId, visited, edges, vertices, level) {
-  "use strict";
+  'use strict';
 
   var result = [ ];
 
@@ -4746,7 +4751,7 @@ function SUBNODES (searchAttributes, vertexId, visited, edges, vertices, level) 
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_PATHS (vertices, edgeCollection, direction, options) {
-  "use strict";
+  'use strict';
 
   direction      = direction || "outbound";
   followCycles   = followCycles || false;
@@ -4860,7 +4865,7 @@ function AQL_PATHS (vertices, edgeCollection, direction, options) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_GRAPH_PATHS (graphName, options) {
-  "use strict";
+  'use strict';
 
   var searchDirection;
   if (! options) {
@@ -4960,7 +4965,7 @@ function AQL_GRAPH_PATHS (graphName, options) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function TRAVERSAL_VISITOR (config, result, vertex, path) {
-  "use strict";
+  'use strict';
 
   if (config.trackPaths) {
     result.push(CLONE({ vertex: vertex, path: path }));
@@ -4975,7 +4980,7 @@ function TRAVERSAL_VISITOR (config, result, vertex, path) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function TRAVERSAL_NEIGHBOR_VISITOR (config, result, vertex, path) {
-  "use strict";
+  'use strict';
 
   result.push(CLONE({ vertex: vertex, path: path, startVertex : config.startVertex }));
 }
@@ -4985,7 +4990,7 @@ function TRAVERSAL_NEIGHBOR_VISITOR (config, result, vertex, path) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function TRAVERSAL_TREE_VISITOR (config, result, vertex, path) {
-  "use strict";
+  'use strict';
 
   if (result.length === 0) {
     result.push({ });
@@ -5018,7 +5023,7 @@ function TRAVERSAL_TREE_VISITOR (config, result, vertex, path) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function TRAVERSAL_EDGE_EXAMPLE_FILTER (config, vertex, edge, path) {
-  "use strict";
+  'use strict';
   if (config.edgeCollectionRestriction) {
     if (typeof config.edgeCollectionRestriction === "string" ) {
       config.edgeCollectionRestriction = [config.edgeCollectionRestriction];
@@ -5039,7 +5044,7 @@ function TRAVERSAL_EDGE_EXAMPLE_FILTER (config, vertex, edge, path) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function TRAVERSAL_VERTEX_FILTER (config, vertex, path) {
-  "use strict";
+  'use strict';
   if (config.filterVertexExamples && ! AQL_MATCHES(vertex, config.filterVertexExamples)) {
     if (config.filterVertexCollections
       && config.vertexFilterMethod.indexOf("exclude") === -1
@@ -5064,7 +5069,7 @@ function TRAVERSAL_VERTEX_FILTER (config, vertex, path) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function TRAVERSAL_CHECK_EXAMPLES_TYPEWEIGHTS (examples, func) {
-  "use strict";
+  'use strict';
 
   if (TYPEWEIGHT(examples) === TYPEWEIGHT_STRING) {
     // a callback function was supplied. this is considered valid
@@ -5096,7 +5101,7 @@ function TRAVERSAL_CHECK_EXAMPLES_TYPEWEIGHTS (examples, func) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function TO_ID (vertex, collection) {
-  "use strict";
+  'use strict';
 
   if (typeof vertex === 'object' && vertex.hasOwnProperty('_id')) {
     return vertex._id;
@@ -5110,17 +5115,10 @@ function TO_ID (vertex, collection) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// @brief traverse a graph
+/// @brief Create basic traversal config
 ////////////////////////////////////////////////////////////////////////////////
 
-function TRAVERSAL_FUNC (func,
-                         datasource,
-                         startVertex,
-                         endVertex,
-                         direction,
-                         params) {
-  "use strict";
-
+function TRAVERSAL_CONFIG (func, datasource, startVertex, endVertex, direction, params) {
   if (params === undefined) {
     params = { };
   }
@@ -5151,7 +5149,6 @@ function TRAVERSAL_FUNC (func,
   var config = {
     distance: params.distance,
     connect: params.connect,
-    datasource: datasource,
     trackPaths: params.paths || false,
     visitor: params.visitor,
     visitorReturnsResults: params.visitorReturnsResults || false,
@@ -5159,18 +5156,23 @@ function TRAVERSAL_FUNC (func,
     minDepth: params.minDepth,
     maxIterations: params.maxIterations,
     uniqueness: params.uniqueness,
-    expander: direction,
-    direction: direction,
     strategy: params.strategy,
     order: params.order,
     itemOrder: params.itemOrder,
-    startVertex : startVertex,
-    endVertex : endVertex,
     weight : params.weight,
     defaultWeight : params.defaultWeight,
     prefill : params.prefill,
-    data: params.data  
+    data: params.data,
+    datasource: datasource,
+    expander: direction,
+    direction: direction,
+    startVertex: startVertex,
+    endVertex: endVertex
   };
+
+  if (params.hasOwnProperty("includePath")) {
+    config.includePath = params.includePath;
+  }
 
   if (typeof params.filter === "function") {
     config.filter = params.filter;
@@ -5221,19 +5223,43 @@ function TRAVERSAL_FUNC (func,
   // end vertex
   var e;
   if (endVertex !== undefined) {
-    try {
-      e = INTERNAL.db._document(endVertex);
-    }
-    catch (err2) {
+    if (typeof endVertex === "string") {
+      try {
+        e = INTERNAL.db._document(endVertex);
+      }
+      catch (err2) {
+      }
+    } else {
+      e = endVertex;
     }
   }
 
+  return {
+    config: config,
+    endVertex: e,
+    vertex: v
+  };
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+/// @brief traverse a graph
+////////////////////////////////////////////////////////////////////////////////
+
+function TRAVERSAL_FUNC (func,
+                         datasource,
+                         startVertex,
+                         endVertex,
+                         direction,
+                         params) {
+  'use strict';
+
+  var info = TRAVERSAL_CONFIG(func, datasource, startVertex, endVertex, direction, params);
   var result = [ ];
-  if (v !== null) {
-    var traverser = new TRAVERSAL.Traverser(config);
-    traverser.traverse(result, v, e);
+  if (info.vertex !== null) {
+    var traverser = new TRAVERSAL.Traverser(info.config);
+    traverser.traverse(result, info.vertex, info.endVertex);
   }
-
   return result;
 }
 
@@ -5451,7 +5477,7 @@ function DETERMINE_WEIGHT (edge, weight, defaultWeight) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function TRAVERSAL_DISTANCE_VISITOR (config, result, vertex, path) {
-  "use strict";
+  'use strict';
 
   if (config.endVertex && config.endVertex === vertex._id) {
     var dist = 0;
@@ -5476,55 +5502,49 @@ function TRAVERSAL_DISTANCE_VISITOR (config, result, vertex, path) {
 /// @brief visitor callback function for traversal
 ////////////////////////////////////////////////////////////////////////////////
 
-function TRAVERSAL_DIJSKTRA_VISITOR (config, result, vertex, path) {
-  "use strict";
-  if (config.endVertex && config.endVertex === vertex._id) {
-    path.vertices.forEach(function (from) {
-      path.vertices.forEach(function (to) {
-        if (config.prefill.indexOf(JSON.stringify({ from : TO_ID(from), to :  TO_ID(to)})) !== -1) {
-          return;
-        }
-        var positionFrom = path.vertices.indexOf(from);
-        var positionTo = path.vertices.indexOf(to);
-        if (positionFrom > positionTo && config.direction !== 'any') {
-          return;
-        }
-        var startVertex = from._id;
-        var vertex = to;
-
-        var distance = 0;
-        var pathNew  = { vertices : [ from ], edges : [ ] };
-        while (positionFrom !== positionTo) {
-          var edgePosition;
-          if (positionFrom > positionTo) {
-            edgePosition = positionFrom-1;
-          } else {
-            edgePosition = positionFrom;
-          }
-          if (positionFrom > positionTo) {
-            positionFrom = positionFrom -1;
-          } else {
-            positionFrom ++;
-          }
-          pathNew.vertices.push(path.vertices[positionFrom]);
-          pathNew.edges.push(path.edges[edgePosition]);
-          if (config.weight) {
-            if (path.edges[edgePosition][config.weight]  &&
-              typeof path.edges[edgePosition][config.weight] === "number") {
-              distance = distance + path.edges[edgePosition][config.weight];
-            } else if (config.defaultWeight) {
-              distance = distance + config.defaultWeight;
-            }
-          } else {
-            distance++;
-          }
-        }
-        result.push(
-          CLONE({ vertex: vertex, distance: distance , path: pathNew , startVertex : startVertex})
-        );
-      });
-    });
+function TRAVERSAL_DIJKSTRA_VISITOR (config, result, node, path) {
+  'use strict';
+  var vertex = node.vertex;
+  var res;
+  if (config.hasOwnProperty("includeData")
+    && config.includeData === true) {
+    res = {
+      vertex: vertex,
+      distance: node.dist,
+      startVertex : path.vertices[0]
+    };
+  } else {
+    res = {
+      vertex: vertex._id,
+      distance: node.dist,
+      startVertex : path.vertices[0]._id
+    };
   }
+  if (config.hasOwnProperty("includePath")) {
+    var incl = config.includePath;
+    res.path = {};
+    if (incl.vertices === true) {
+      if (config.hasOwnProperty("includeData")
+        && config.includeData === true) {
+        res.path.vertices = path.vertices;
+      } else {
+        res.path.vertices = path.vertices.map(function(o) {
+          return o._id;
+        });
+      }
+    }
+    if (incl.edges === true) {
+      if (config.hasOwnProperty("includeData")
+        && config.includeData === true) {
+        res.path.edges = path.edges;
+      } else {
+        res.path.edges = path.edges.map(function(o) {
+          return o._id;
+        });
+      }
+    }
+  }
+  result.push(CLONE(res));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -5533,7 +5553,7 @@ function TRAVERSAL_DIJSKTRA_VISITOR (config, result, vertex, path) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function SHORTEST_PATH_PARAMS (params) {
-  "use strict";
+  'use strict';
 
   if (params === undefined) {
     params = { };
@@ -5543,10 +5563,11 @@ function SHORTEST_PATH_PARAMS (params) {
   params.itemorder = "forward";
 
   // add user-defined visitor, if specified
-  if (typeof params.visitor === "string") {
-    params.visitor = GET_VISITOR(params.visitor, params);
-  }
-  else {
+  if (params.hasOwnProperty("visitor")) {
+    if (typeof params.visitor === "string") {
+      params.visitor = GET_VISITOR(params.visitor, params);
+    }
+  } else {
     params.visitor = TRAVERSAL_VISITOR;
   }
 
@@ -5574,7 +5595,7 @@ function AQL_SHORTEST_PATH (vertexCollection,
                             endVertex,
                             direction,
                             params) {
-  "use strict";
+  'use strict';
 
   params = SHORTEST_PATH_PARAMS(params);
 
@@ -5591,7 +5612,7 @@ function AQL_SHORTEST_PATH (vertexCollection,
 ////////////////////////////////////////////////////////////////////////////////
 
 function CALCULATE_SHORTEST_PATHES_WITH_FLOYD_WARSHALL (graphData, options) {
-  "use strict";
+  'use strict';
 
   var graph = graphData, result = [];
 
@@ -5651,7 +5672,6 @@ function CALCULATE_SHORTEST_PATHES_WITH_FLOYD_WARSHALL (graphData, options) {
         delete paths[e._to][e._from].paths;
         delete paths[e._from][e._to].paths;
       } catch (ignore) {
-
       }
     }
     vertices[e._to] = 1;
@@ -5760,21 +5780,21 @@ function CALCULATE_SHORTEST_PATHES_WITH_FLOYD_WARSHALL (graphData, options) {
 /// GRAPH_TRAVERSAL
 ////////////////////////////////////////////////////////////////////////////////
 
-function TRAVERSAL_PARAMS (params) {
-  "use strict";
+function TRAVERSAL_PARAMS (params, defaultVisitor) {
+  'use strict';
 
   if (params === undefined) {
     params = { };
   }
 
   // add user-defined visitor, if specified
-  if (typeof params.visitor === "string") {
-    params.visitor = GET_VISITOR(params.visitor, params);
+  if (params.hasOwnProperty("visitor")) {
+    if (typeof params.visitor === "string") {
+      params.visitor = GET_VISITOR(params.visitor, params);
+    }
+  } else {
+    params.visitor = defaultVisitor || TRAVERSAL_VISITOR;
   }
-  else {
-    params.visitor = TRAVERSAL_VISITOR;
-  }
-
   return params;
 }
 
@@ -5813,12 +5833,14 @@ function MERGE_EXAMPLES_WITH_EDGES (examples, edges) {
   return result;
 }
 
+
 ////////////////////////////////////////////////////////////////////////////////
-/// @brief calculate shortest paths by dijkstra
+/// @brief Creates parameters for a dijkstra based shortest path traversal
 ////////////////////////////////////////////////////////////////////////////////
 
-function CALCULATE_SHORTEST_PATHES_WITH_DIJKSTRA (graphName, options) {
-  var params = TRAVERSAL_PARAMS(), factory = TRAVERSAL.generalGraphDatasourceFactory(graphName);
+function CREATE_DIJKSTRA_PARAMS(graphName, options) {
+  var params = TRAVERSAL_PARAMS(options, TRAVERSAL_DIJKSTRA_VISITOR),
+      factory = TRAVERSAL.generalGraphDatasourceFactory(graphName);
   params.paths = true;
   if (options.edgeExamples) {
     params.followEdges = options.edgeExamples;
@@ -5831,47 +5853,51 @@ function CALCULATE_SHORTEST_PATHES_WITH_DIJKSTRA (graphName, options) {
   }
   params.weight = options.weight;
   params.defaultWeight = options.defaultWeight;
+
   params = SHORTEST_PATH_PARAMS(params);
-  // add user-defined visitor, if specified
-  if (typeof options.visitor === "string") {
-    params.visitor = GET_VISITOR(options.visitor, params);
-  }
-  else {
-    params.visitor =  TRAVERSAL_DIJSKTRA_VISITOR;
-  }
+
+  params.strategy = "dijkstramulti";
+
   // merge other options
-  Object.keys(options).forEach(function (att) {
-    if (! params.hasOwnProperty(att)) {
+  for (var att in options) {
+    if (options.hasOwnProperty(att) &&
+      !params.hasOwnProperty(att)) {
       params[att] = options[att];
     }
-  });
-  var result = [], fromVertices = RESOLVE_GRAPH_TO_FROM_VERTICES(graphName, options),
-    toVertices = RESOLVE_GRAPH_TO_TO_VERTICES(graphName, options, "GRAPH_SHORTEST_PATH");
+  }
+  
+  var toVertices = RESOLVE_GRAPH_TO_TO_VERTICES(graphName, options);
+  var toVerticesObject = {}; 
 
-  var calculated = {};
-  fromVertices.forEach(function (v) {
-    toVertices.forEach(function (t) {
-      if (calculated[JSON.stringify({ from : TO_ID(v), to :  TO_ID(t)})]) {
-        result.push(calculated[JSON.stringify({ from : TO_ID(v), to :  TO_ID(t)})]);
-        return;
-      }
-      params.prefill = Object.keys(calculated);
-      var e = TRAVERSAL_FUNC("GRAPH_SHORTEST_PATH",
-        factory,
-        TO_ID(v),
-        TO_ID(t),
-        options.direction,
-        params);
-      e.forEach(function (f) {
-        if (TO_ID(v) === f.startVertex &&  TO_ID(t) === f.vertex._id) {
-          result.push(f);
-        }
-        calculated[JSON.stringify({ from : f.startVertex, to : f.vertex._id})] = f;
-      });
-    });
-  });
-  result.forEach(function (r) {
-    r.paths = [r.path];
+  var i;
+  for (i = 0; i < toVertices.length; ++i) {
+    toVerticesObject[TO_ID(toVertices[i])] = false;
+  }
+
+  return {
+    params: params,
+    factory: factory,
+    fromVertices: RESOLVE_GRAPH_TO_FROM_VERTICES(graphName, options),
+    toVertices: toVerticesObject
+  };
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// @brief calculate shortest paths by dijkstra
+////////////////////////////////////////////////////////////////////////////////
+
+function CALCULATE_SHORTEST_PATHES_WITH_DIJKSTRA (graphName, options) {
+  var info = CREATE_DIJKSTRA_PARAMS(graphName, options);
+  var result = [];
+  info.fromVertices.forEach(function (v) {
+    var e = TRAVERSAL_FUNC("GRAPH_SHORTEST_PATH",
+      info.factory,
+      TO_ID(v),
+      JSON.parse(JSON.stringify(info.toVertices)),
+      options.direction,
+      info.params
+    );
+    result = result.concat(e);
   });
   return result;
 }
@@ -5980,7 +6006,7 @@ function AQL_GRAPH_SHORTEST_PATH (graphName,
                                   startVertexExample,
                                   endVertexExample,
                                   options) {
-  "use strict";
+  'use strict';
 
   if (! options) {
     options = {  };
@@ -6014,7 +6040,7 @@ function AQL_TRAVERSAL (vertexCollection,
                         startVertex,
                         direction,
                         params) {
-  "use strict";
+  'use strict';
 
   params = TRAVERSAL_PARAMS(params);
 
@@ -6100,7 +6126,7 @@ function AQL_GRAPH_TRAVERSAL (graphName,
                               startVertexExample,
                               direction,
                               options) {
-  "use strict";
+  'use strict';
 
   var result = [];
   options = TRAVERSAL_PARAMS(options);
@@ -6127,7 +6153,7 @@ function AQL_GRAPH_TRAVERSAL (graphName,
 ////////////////////////////////////////////////////////////////////////////////
 
 function TRAVERSAL_TREE_PARAMS (params, connectName, func) {
-  "use strict";
+  'use strict';
 
   if (params === undefined) {
     params = { };
@@ -6163,7 +6189,7 @@ function AQL_TRAVERSAL_TREE (vertexCollection,
                              direction,
                              connectName,
                              params) {
-  "use strict";
+  'use strict';
 
   params = TRAVERSAL_TREE_PARAMS(params, connectName, "TRAVERSAL_TREE");
   if (params === null) {
@@ -6229,23 +6255,18 @@ function AQL_GRAPH_DISTANCE_TO (graphName,
                                 startVertexExample,
                                 endVertexExample,
                                 options) {
-  "use strict";
+  'use strict';
 
   if (! options) {
     options = {};
   }
-  options.noPaths = true;
-  var res = AQL_GRAPH_SHORTEST_PATH(
+  options.includeData = false;
+  if (! options.algorithm) {
+    options.algorithm = "dijkstra";
+  }
+  return AQL_GRAPH_SHORTEST_PATH(
     graphName, startVertexExample, endVertexExample, options
-  ), result = [];
-  res.forEach(function (r) {
-    result.push({
-      startVertex : r.startVertex,
-      distance : r.distance,
-      vertex : r.vertex
-    });
-  });
-  return result;
+  );
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -6304,7 +6325,7 @@ function AQL_GRAPH_TRAVERSAL_TREE (graphName,
                                    direction,
                                    connectName,
                                    options) {
-  "use strict";
+  'use strict';
 
   var result = [];
   options = TRAVERSAL_TREE_PARAMS(options, connectName, "GRAPH_TRAVERSAL_TREE");
@@ -6339,7 +6360,7 @@ function AQL_EDGES (edgeCollection,
                     vertex,
                     direction,
                     examples) {
-  "use strict";
+  'use strict';
 
   var c = COLLECTION(edgeCollection), result;
 
@@ -6366,7 +6387,7 @@ function AQL_EDGES (edgeCollection,
 ////////////////////////////////////////////////////////////////////////////////
 
 function FILTERED_EDGES (edges, vertex, direction, examples) {
-  "use strict";
+  'use strict';
 
   var result = [ ];
 
@@ -6410,7 +6431,7 @@ function AQL_NEIGHBORS (vertexCollection,
                         vertex,
                         direction,
                         examples) {
-  "use strict";
+  'use strict';
 
   vertex = TO_ID(vertex, vertexCollection);
   var edges = AQL_EDGES(edgeCollection, vertex, direction);
@@ -6484,7 +6505,7 @@ function AQL_NEIGHBORS (vertexCollection,
 function AQL_GRAPH_NEIGHBORS (graphName,
                               vertexExample,
                               options) {
-  "use strict";
+  'use strict';
   if (! options) {
     options = { };
   }
@@ -6624,7 +6645,7 @@ function AQL_GRAPH_NEIGHBORS (graphName,
 function AQL_GRAPH_EDGES (graphName,
                           vertexExample,
                           options) {
-  "use strict";
+  'use strict';
 
   var neighbors = AQL_GRAPH_NEIGHBORS(graphName,
     vertexExample,
@@ -6692,7 +6713,7 @@ function AQL_GRAPH_EDGES (graphName,
 function AQL_GRAPH_VERTICES (graphName,
                              vertexExamples,
                              options) {
-  "use strict";
+  'use strict';
 
   if (! options) {
     options = {  };
@@ -6787,7 +6808,7 @@ function AQL_GRAPH_COMMON_NEIGHBORS (graphName,
                                      vertex2Examples,
                                      options1,
                                      options2) {
-  "use strict";
+  'use strict';
 
   var neighbors1 = TRANSFER_GRAPH_NEIGHBORS_RESULT(
     AQL_GRAPH_NEIGHBORS(graphName, vertex1Examples, options1)
@@ -6895,7 +6916,7 @@ function AQL_GRAPH_COMMON_PROPERTIES (graphName,
                                       vertex1Examples,
                                       vertex2Examples,
                                       options) {
-  "use strict";
+  'use strict';
 
   if (! options) {
     options = { };
@@ -6970,6 +6991,44 @@ function AQL_GRAPH_COMMON_PROPERTIES (graphName,
   });
 
   return res;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// @brief Prepares and executes a dijkstra search with predefined result object
+///        The result object will be handed over in each traversal step
+////////////////////////////////////////////////////////////////////////////////
+
+function RUN_DIJKSTRA_WITH_RESULT_HANDLE (func, graphName, options, result, afterEach) {
+  result = result || [];
+  var dijkstraParams = CREATE_DIJKSTRA_PARAMS(graphName, options);
+  dijkstraParams.fromVertices.forEach(function (v) {
+    var info = TRAVERSAL_CONFIG(
+      func,
+      dijkstraParams.factory,
+      TO_ID(v),
+      JSON.parse(JSON.stringify(dijkstraParams.toVertices)),
+      options.direction,
+      dijkstraParams.params
+    );
+    if (info.vertex !== null) {
+      var traverser = new TRAVERSAL.Traverser(info.config);
+      traverser.traverse(result, info.vertex, info.endVertex);
+      if (typeof afterEach === "function") {
+        afterEach(result, info.vertex);
+      }
+    }
+  });
+  return result;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+/// @brief visitor callback function for absolute eccentricity traversal
+////////////////////////////////////////////////////////////////////////////////
+
+function TRAVERSAL_ABSOLUTE_ECCENTRICITY_VISITOR (config, result, node, path) {
+  'use strict';
+  result[path.vertices[0]._id] = Math.max(node.dist, result[path.vertices[0]._id] || 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -7053,24 +7112,38 @@ function AQL_GRAPH_COMMON_PROPERTIES (graphName,
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_GRAPH_ABSOLUTE_ECCENTRICITY (graphName, vertexExample, options) {
-  "use strict";
+  'use strict';
   if (! options) {
-    options = {  };
+    options = {};
   }
   if (! options.direction) {
     options.direction =  'any';
   }
+  if (! options.algorithm) {
+    options.algorithm = "dijkstra";
+  }
+  options.fromVertexExample = vertexExample;
+  options.toVertexExample = {};
 
-  var distanceMap = AQL_GRAPH_DISTANCE_TO(graphName, vertexExample, {}, options), 
-      result = {};
-  distanceMap.forEach(function(d) {
-    if (!result[d.startVertex]) {
-      result[d.startVertex] = d.distance;
-    } else {
-      result[d.startVertex] = Math.max(result[d.startVertex], d.distance);
-    }
-  });
-  return result;
+  options.visitor = TRAVERSAL_ABSOLUTE_ECCENTRICITY_VISITOR;
+  return RUN_DIJKSTRA_WITH_RESULT_HANDLE(
+    "ABSOLUTE_ECCENTRICITY",
+    graphName,
+    options,
+    {}
+  );
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+/// @brief visitor callback function for absolute eccentricity traversal
+////////////////////////////////////////////////////////////////////////////////
+
+function TRAVERSAL_ECCENTRICITY_VISITOR (config, result, node, path) {
+  'use strict';
+  if(path.edges.length > 0) {
+    result.current = Math.min(1 / node.dist, result.current || 1);
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -7127,26 +7200,56 @@ function AQL_GRAPH_ABSOLUTE_ECCENTRICITY (graphName, vertexExample, options) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_GRAPH_ECCENTRICITY (graphName, options) {
-  "use strict";
+  'use strict';
 
   if (! options) {
     options = {  };
   }
-  if (! options.algorithm) {
-    options.algorithm = "Floyd-Warshall";
+  if (! options.direction) {
+    options.direction =  'any';
   }
-
-  var result = AQL_GRAPH_ABSOLUTE_ECCENTRICITY(graphName, {}, options), max = 0;
-  Object.keys(result).forEach(function (r) {
-    result[r] = result[r] === 0 ? 0 : 1 / result[r];
-    if (result[r] > max) {
-      max = result[r];
+  if (! options.algorithm) {
+    options.algorithm = "dijkstra";
+  }
+  options.fromVertexExample = {};
+  options.toVertexExample = {};
+  options.visitor = TRAVERSAL_ECCENTRICITY_VISITOR;
+  var result = RUN_DIJKSTRA_WITH_RESULT_HANDLE(
+    "ECCENTRICITY",
+    graphName,
+    options,
+    {
+      vertices: {},
+      max: 0
+    },
+    function (result, vertex) {
+      if (result.current === undefined) {
+        result.vertices[vertex._id] = 0;
+      } else {
+        if (result.current > result.max) {
+          result.max = result.current;
+        }
+        result.vertices[vertex._id] = result.current;
+        delete result.current;
+      }
     }
+  );
+  var list = result.vertices;
+  Object.keys(list).forEach(function (r) {
+    list[r] /= result.max;
   });
-  Object.keys(result).forEach(function (r) {
-    result[r] = result[r] / max;
-  });
-  return result;
+  return list;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+/// @brief visitor callback function for absolute closeness traversal
+////////////////////////////////////////////////////////////////////////////////
+
+function TRAVERSAL_ABSOLUTE_CLOSENESS_VISITOR (config, result, node, path) {
+  'use strict';
+  result[path.vertices[0]._id] = result[path.vertices[0]._id] || 0;
+  result[path.vertices[0]._id] += node.dist;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -7229,28 +7332,84 @@ function AQL_GRAPH_ECCENTRICITY (graphName, options) {
 /// @endDocuBlock
 ////////////////////////////////////////////////////////////////////////////////
 
+/*
 function AQL_GRAPH_ABSOLUTE_CLOSENESS (graphName, vertexExample, options) {
-  "use strict";
+ 'use strict';
+ if (! options) {
+   options = { };
+ }
+ if (! options.direction) {
+   options.direction = 'any';
+ }
+ var distanceMap = AQL_GRAPH_DISTANCE_TO(graphName, vertexExample , {}, options), result = {};
+ distanceMap.forEach(function(d) {
+   if (options.direction !== 'any' && options.calcNormalized) {
+     d.distance = d.distance === 0 ? 0 : 1 / d.distance;
+   }
+   if (!result[d.startVertex]) {
+     result[d.startVertex] = d.distance;
+   } else {
+     result[d.startVertex] = d.distance + result[d.startVertex];
+   }
+ });
+ return result;
+}
 
+function AQL_GRAPH_CLOSENESS (graphName, options) {
+ 'use strict';
+ if (! options) {
+   options = { };
+ }
+ options.calcNormalized = true;
+ if (! options.algorithm) {
+   options.algorithm = "Floyd-Warshall";
+ }
+ var result = AQL_GRAPH_ABSOLUTE_CLOSENESS(graphName, {}, options), max = 0;
+ Object.keys(result).forEach(function (r) {
+   if (options.direction === 'any') {
+     result[r] = result[r] === 0 ? 0 : 1 / result[r];
+   }
+   if (result[r] > max) {
+     max = result[r];
+   }
+ });
+ Object.keys(result).forEach(function (r) {
+   result[r] = result[r] / max;
+ });
+ return result;
+}
+*/
+
+function AQL_GRAPH_ABSOLUTE_CLOSENESS (graphName, vertexExample, options) {
+  'use strict';
   if (! options) {
-    options = {  };
+    options = {};
   }
   if (! options.direction) {
     options.direction =  'any';
   }
+  if (! options.algorithm) {
+    options.algorithm = "dijkstra";
+  }
+  options.fromVertexExample = vertexExample;
+  options.toVertexExample = {};
 
-  var distanceMap = AQL_GRAPH_DISTANCE_TO(graphName, vertexExample , {}, options), result = {};
-  distanceMap.forEach(function(d) {
-    if (options.direction !==  'any' && options.calcNormalized) {
-      d.distance = d.distance === 0 ?  0 : 1 / d.distance;
-    }
-    if (!result[d.startVertex]) {
-      result[d.startVertex] = d.distance;
-    } else {
-      result[d.startVertex] = d.distance + result[d.startVertex];
-    }
-  });
-  return result;
+  options.visitor = TRAVERSAL_ABSOLUTE_CLOSENESS_VISITOR;
+  return RUN_DIJKSTRA_WITH_RESULT_HANDLE(
+    "ABSOLUTE_CLOSENESS",
+    graphName,
+    options,
+    {}
+  );
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// @brief visitor callback function for absolute closeness traversal
+////////////////////////////////////////////////////////////////////////////////
+
+function TRAVERSAL_CLOSENESS_VISITOR (config, result, node, path) {
+  'use strict';
+  result.current += node.dist;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -7321,31 +7480,46 @@ function AQL_GRAPH_ABSOLUTE_CLOSENESS (graphName, vertexExample, options) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_GRAPH_CLOSENESS (graphName, options) {
-  "use strict";
+  'use strict';
 
   if (! options) {
     options = {  };
   }
-  options.calcNormalized = true;
-
-  if (! options.algorithm) {
-    options.algorithm = "Floyd-Warshall";
+  if (! options.direction) {
+    options.direction =  'any';
   }
+  if (! options.algorithm) {
+    options.algorithm = "dijkstra";
+  }
+  options.fromVertexExample = {};
+  options.toVertexExample = {};
+  options.visitor = TRAVERSAL_CLOSENESS_VISITOR;
 
-  var result = AQL_GRAPH_ABSOLUTE_CLOSENESS(graphName, {}, options), max = 0;
-  Object.keys(result).forEach(function (r) {
-    if (options.direction ===  'any') {
-      result[r] = result[r]  === 0 ? 0 : 1 / result[r];
+  var result = RUN_DIJKSTRA_WITH_RESULT_HANDLE(
+    "CLOSENESS",
+    graphName,
+    options,
+    {
+      vertices: {},
+      current: 0,
+      max: 0
+    },
+    function(result, vertex) {
+      if (result.current !== 0) {
+        result.current = 1 / result.current;
+      }
+      if (result.current > result.max) {
+        result.max = result.current;
+      }
+      result.vertices[vertex._id] = result.current;
+      result.current = 0;
     }
-    if (result[r] > max) {
-      max = result[r];
-    }
+  );
+  var list = result.vertices;
+  Object.keys(list).forEach(function (r) {
+    list[r] /= result.max;
   });
-  Object.keys(result).forEach(function (r) {
-    result[r] = result[r] / max;
-  });
-
-  return result;
+  return list;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -7411,7 +7585,7 @@ function AQL_GRAPH_CLOSENESS (graphName, options) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_GRAPH_ABSOLUTE_BETWEENNESS (graphName, options) {
-  "use strict";
+  'use strict';
 
   if (! options) {
     options = {  };
@@ -7516,7 +7690,7 @@ function AQL_GRAPH_ABSOLUTE_BETWEENNESS (graphName, options) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_GRAPH_BETWEENNESS (graphName, options) {
-  "use strict";
+  'use strict';
 
   if (! options) {
     options = {  };
@@ -7598,7 +7772,7 @@ function AQL_GRAPH_BETWEENNESS (graphName, options) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_GRAPH_RADIUS (graphName, options) {
-  "use strict";
+  'use strict';
 
   if (! options) {
     options = {  };
@@ -7689,7 +7863,7 @@ function AQL_GRAPH_RADIUS (graphName, options) {
 ////////////////////////////////////////////////////////////////////////////////
 
 function AQL_GRAPH_DIAMETER (graphName, options) {
-  "use strict";
+  'use strict';
 
   if (! options) {
     options = {  };

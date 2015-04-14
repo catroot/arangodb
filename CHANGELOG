@@ -1,6 +1,142 @@
 v2.6.0 (XXXX-XX-XX)
 -------------------
 
+* issue #1231: bug xor feature in AQL: LENGTH(null) == 4 
+
+  This changes the behavior of the AQL `LENGTH` function as follows:
+
+  - if the single argument to `LENGTH()` is `null`, then the result will now be `0`. In previous
+    versions of ArangoDB, the result of `LENGTH(null)` was `4`.
+
+  - if the single argument to `LENGTH()` is `true`, then the result will now be `1`. In previous
+    versions of ArangoDB, the result of `LENGTH(true)` was `4`.
+
+  - if the single argument to `LENGTH()` is `false`, then the result will now be `0`. In previous
+    versions of ArangoDB, the result of `LENGTH(false)` was `5`.
+
+  The results of `LENGTH()` with string, numeric, array object argument values do not change.
+
+* issue #1298: Bulk import if data already exists (#1298)
+
+  This change extends the HTTP REST API for bulk imports as follows:
+
+  When documents are imported and the `_key` attribute is specified for them, the import can be
+  used for inserting and updating/replacing documents. Previously, the import could be used for
+  inserting new documents only, and re-inserting a document with an existing would have failed
+  with a *unique key constraint violated* error.
+
+  The above behavior is still the default. However, the API now allows controlling the behavior
+  in case of a unique key constraint error via the optional URL parameter `onDuplicate`. 
+  
+  This parameter can have one of the following values:
+    
+  - `error`: when a unique key constraint error occurs, do not import or update the document but
+    report an error. This is the default.
+    
+  - `update`: when a unique key constraint error occurs, try to (partially) update the existing
+    document with the data specified in the import. This may still fail if the document would
+    violate secondary unique indexes. Only the attributes present in the import data will be
+    updated and other attributes already present will be preserved. The number of updated documents
+    will be reported in the `updated` attribute of the HTTP API result.
+
+  - `replace`: when a unique key constraint error occurs, try to fully replace the existing
+    document with the data specified in the import. This may still fail if the document would
+    violate secondary unique indexes. The number of replaced documents will be reported in the 
+    `updated` attribute of the HTTP API result.
+
+  - `ignore`: when a unique key constraint error occurs, ignore this error. There will be no
+    insert, update or replace for the particular document. Ignored documents will be reported
+    separately in the `ignored` attribute of the HTTP API result.
+
+  The result of the HTTP import API will now contain the attributes `ignored` and `updated`, which
+  contain the number of ignored and updated documents respectively. These attributes will contain a
+  value of zero unless the `onDuplicate` URL parameter is set to either `update` or `replace`
+  (in this case the `updated` attribute may contain non-zero values) or `ignore` (in this case the
+  `ignored` attribute may contain a non-zero value).
+
+  To support the feature, arangoimp also has a new command line option `--on-duplicate` which can
+  have one of the values `error`, `update`, `replace`, `ignore`. The default value is `error`.
+
+* changed behavior of `db._query()` in the ArangoShell:
+
+  if the command's result is printed in the shell, the first 10 results will be printed. Previously
+  only a basic description of the underlying query result cursor was printed. Additionally, if the
+  cursor result contains more than 10 results, the cursor is assigned to a global variable `more`,
+  which can be used to iterate over the cursor result. 
+
+  Example:
+
+      arangosh [_system]> db._query("FOR i IN 1..15 RETURN i")
+      [object ArangoQueryCursor, count: 15, hasMore: true]
+
+      [ 
+        1, 
+        2, 
+        3, 
+        4, 
+        5, 
+        6, 
+        7, 
+        8, 
+        9, 
+        10 
+      ]
+
+      type 'more' to show more documents
+
+
+      arangosh [_system]> more
+      [object ArangoQueryCursor, count: 15, hasMore: false]
+
+      [ 
+        11, 
+        12, 
+        13, 
+        14, 
+        15 
+      ]
+
+* Breaking Changes:
+
+  * AQL command: `GRAPH_SHORTEST_PATH` now only returns IDs and does not extract data any more. 
+    It yields an additional option `includeData` which is an object, taking exactly two keys:
+    * `edges` set to true will extract all data stored alongside the edges of each path.
+    * `vertices` set to true will extract all data stored alongside the vertices of each path.
+    The default value of these parameters has been set to `false`
+
+  * JS Module: general-graph:
+    All graph measurements returning exactly one value returned an array containing exactly this one value.
+    Now they will return the value directly.
+    Modified functions are:
+    * `graph._absoluteEccentricity`
+    * `graph._eccentricity`
+    * `graph._absoluteCloseness`
+    * `graph._closeness`
+    * `graph._absoluteBetweenness`
+    * `graph._betweenness`
+    * `graph._radius`
+    * `graph._diameter`
+
+* Improved GRAPH_SHORTEST_PATH computation
+
+  This involved a change in the default behaviour.
+  The default setting will now only print the distance and the ids of nodes.
+  We have added an optional boolean parameter `includeData` if this is set to `true`
+  all documents and edges in the result will be fully expanded.
+  We have also added an optional parameter `includePath` of type object.
+  It has two optional subattributes `vertices` and `edges` both of type boolean.
+  Both can be set individually and the result will include all vertices on the path if
+  `includePath.vertices == true` and all edge if `includePath.edges == true` respectivly.
+  So if you want to get the exactly old result back you have to set
+  ```
+  GRAPH_SHORTEST_PATH(<graph>, <source>, <target>, {includeData: true, includePath: {edges: true, vertices: true}})
+  ```
+
+  The default behaviour is now independent of the size of documents as the extraction part could be optimized.
+  Also the internal algorithm to find all pathes from one source to several targets has been massively improved.
+
+* added support for HTTP push aka chunked encoding
+
 * issue #1051: add info whether server is running in service or user mode?
 
   This will add a "mode" attribute to the result of the result of HTTP GET `/_api/version?details=true`
@@ -60,9 +196,28 @@ v2.6.0 (XXXX-XX-XX)
 
 * added `extendible` package.
 
+* added Foxx model lifecycle events to repositories. See #1257.
 
-v2.5.2 (XXXX-XX-XX)
+
+v2.5.3 (XXXX-XX-XX)
 -------------------
+
+* issue #1300: Make arangodump not fail if directory exists but is empty
+
+
+v2.5.2 (2015-04-11)
+-------------------
+
+* modules stored in _modules are automatically flushed when changed
+
+* added missing query-id parameter in documentation of HTTP DELETE `/_api/query` endpoint
+
+* added iterator for edge index in AQL queries
+
+  this change may lead to less edges being read when used together with a LIMIT clause
+
+* make graph viewer in web interface issue less expensive queries for determining
+  a random vertex from the graph, and for determining vertex attributes
 
 * issue #1285: syntax error, unexpected $undefined near '@_to RETURN obj
 
@@ -73,6 +228,20 @@ v2.5.2 (XXXX-XX-XX)
 * issue #1289: Foxx models created from database documents expose an internal method
 
 * added `Foxx.Repository#exists`
+
+* parallelise initialization of V8 context in multiple threads
+
+* fixed a possible crash when the debug-level was TRACE
+
+* cluster: do not initialize statistics collection on each
+  coordinator, this fixes a race condition at startup
+
+* cluster: fix a startup race w.r.t. the _configuration collection
+
+* search for db:// JavaScript modules only after all local files have been
+  considered, this speeds up the require command in a cluster considerably
+
+* general cluster speedup in certain areas
 
 
 v2.5.1 (2015-03-19)

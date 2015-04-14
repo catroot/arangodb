@@ -8,10 +8,10 @@ attributes are required though):
 * **author**: The author name
 * **contributors**: An array containing objects, each represents a contributor (with **name** and optional **email**)
 * **controllers**: Map routes to FoxxControllers
-* **exports**: Map names to Foxx exports
 * **defaultDocument**: The default document when the application's root (`/`) is called (defaults to `"index.html"`)
 * **description**: A short description of the application (Meta information)
 * **engines**: Should be an object with **arangodb** set to the ArangoDB version your Foxx app is compatible with
+* **exports**: Map names to Foxx exports
 * **files**: Deliver files
 * **isSystem**: Mark an application as a system application
 * **keywords**: An array of keywords to help people find your Foxx app
@@ -20,7 +20,7 @@ attributes are required though):
 * **name**: Name of the application (Meta information)
 * **repository**: An object with information about where you can find the repository: **type** and **url**
 * **scripts**: An object with script names mapped to filenames, e.g. your app's **setup** and **teardown** scripts
-* **teardown**: Path to a teardown script
+* **tests**: An array of names of files containing mocha tests for the Foxx app.
 * **thumbnail**: Path to a thumbnail that represents the application (Meta information)
 * **version**: Current version of the application (Meta information)
 
@@ -36,12 +36,14 @@ A more complete example for a Manifest file:
   "name": "my_website",
   "version": "1.2.1",
   "description": "My Website with a blog and a shop",
-  "thumnail": "images/website-logo.png",
+  "thumbnail": "images/website-logo.png",
 
   "controllers": {
     "/blog": "apps/blog.js",
     "/shop": "apps/shop.js"
   },
+
+  "exports": "index.js",
 
   "lib": "lib",
 
@@ -60,29 +62,54 @@ A more complete example for a Manifest file:
 
   "scripts": {
     "setup": "scripts/setup.js",
-    "teardown": "scripts/teardown.js"
-  }
+    "teardown": "scripts/teardown.js",
+    "some-maintenance-script": "scripts/prune-comments.js"
+  },
+
+  "tests": [
+    "test/**",
+    "test-*.js"
+  ]
 }
 ```
 
 !SUBSECTION The setup and teardown scripts
 
 You can provide a path to a JavaScript file that prepares ArangoDB for your
-application (or respectively removes it entirely). These scripts have access to
-**appCollection** and **appCollectionName**. Use the **setup** script to create all
-collections your application needs and fill them with initial data if you want
-to. Use the **teardown** script to remove all collections you have created.
+application (or respectively removes it entirely).
+Use the **setup** script to create all collections your application needs
+and fill them with initial data if you want to.
+Use the **teardown** script to remove all collections you have created.
 
 Note: the setup script is called on each request in the development mode.
-If your application needs to set up specific collections, you should always
-check in the setup script whether they are already there.
+If your application needs to set up specific collections,
+you should always check in the setup script whether they are already there.
 
-The teardown script is called when an application is uninstalled. It is good
-practice to drop any collections in the teardown script that the application used
-exclusively, but this is not enforced. Maybe there are reasons to keep application
-data even after removing an application. It's up to you to decide what to do.
+The teardown script is called when an application is uninstalled.
+It is good practice to drop any collections in the teardown script
+that the application used exclusively, but this is not enforced.
+Maybe there are reasons to keep application data even after removing an application.
+It's up to you to decide what to do.
 
-!SUBSECTION controllers is an object that matches routes to files
+!SUBSECTION Mocha tests
+
+You can provide test cases for your Foxx app using the [mocha test framework](http://mochajs.org/)
+and an assertion library like [expect.js](https://github.com/Automattic/expect.js)
+or [chai](http://chaijs.com) (or even the built-in assert module).
+
+The **tests** array lists the relative paths of all mocha tests of your Foxx app.
+In addition to regular paths, the array can also contain any patterns supported by
+the [minimatch module](https://github.com/isaacs/minimatch), for example:
+
+* glob matching: `./tests/*.js` will match all JS files in the folder "tests"
+* globstar matching: `./tests/**` will match all files and subfolders of the folder "tests"
+* brace expansion: `./tests/{a,b,c}.js` will match the files "a.js", "b.js" and "c.js"
+
+ For more information on the supported patterns see the minimatch documentation.
+
+!SUBSECTION Defining controllers
+
+Controllers can be defined as an object mapping routes to file names:
 
 * The **key** is the route you want to mount at
 

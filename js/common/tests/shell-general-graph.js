@@ -1,5 +1,5 @@
-/*jshint unused: false */
-/*global require, assertEqual, assertTrue, assertFalse, fail */
+/*jshint globalstrict:false, strict:false, unused: false */
+/*global assertEqual, assertTrue, assertFalse, fail */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief test the general-graph class
@@ -45,7 +45,7 @@ var _ = require("underscore");
 ////////////////////////////////////////////////////////////////////////////////
 
 function GeneralGraphCreationSuite() {
-  "use strict";
+  'use strict';
   var rn = "UnitTestRelationName";
   var rn1 = "UnitTestRelationName1";
   var vn1 = "UnitTestVerticies1";
@@ -689,7 +689,7 @@ function GeneralGraphCreationSuite() {
 // -----------------------------------------------------------------------------
 
 function GeneralGraphAQLQueriesSuite() {
-  "use strict";
+  'use strict';
   // Definition of names
   var graphName = "UnitTestsGraph";
   var included = "UnitTestIncluded";
@@ -957,7 +957,7 @@ function GeneralGraphAQLQueriesSuite() {
 }
 
 function ChainedFluentAQLResultsSuite() {
-  "use strict";
+  'use strict';
 
   var gn = "UnitTestGraph";
   var user = "UnitTestUsers";
@@ -1810,7 +1810,7 @@ function ChainedFluentAQLResultsSuite() {
 }
 
 function EdgesAndVerticesSuite() {
-  "use strict";
+  'use strict';
 
   var g;
   var vertexId1, vertexId2;
@@ -2385,7 +2385,7 @@ function EdgesAndVerticesSuite() {
 }
 
 function GeneralGraphCommonNeighborsSuite() {
-  "use strict";
+  'use strict';
   var testGraph, actual;
 
   var v1ColName = "UnitTestsAhuacatlVertex1";
@@ -2611,7 +2611,7 @@ function GeneralGraphCommonNeighborsSuite() {
 }
 
 function OrphanCollectionSuite() {
-  "use strict";
+  'use strict';
   var prefix = "UnitTestGraphVertexCollection",
     g1,
     g2,
@@ -2783,17 +2783,16 @@ function OrphanCollectionSuite() {
 }
 
 function MeasurementsSuite() {
-  "use strict";
+  'use strict';
   var g;
   var vertexId1, vertexId2;
   var unitTestGraphName = "unitTestGraph";
 
   var ec1 = "unitTestEdgeCollection1";
   var ec2 = "unitTestEdgeCollection2";
+  var ec3 = "unitTestEdgeCollection3";
   var vc1 = "unitTestVertexCollection1";
   var vc2 = "unitTestVertexCollection2";
-  var vc3 = "unitTestVertexCollection3";
-  var vc4 = "unitTestVertexCollection4";
 
 
   var fillCollections = function() {
@@ -2808,45 +2807,34 @@ function MeasurementsSuite() {
     ids.vId14 = vertex._id;
     vertex = g[vc1].save({first_name: "Tum"});
     ids.vId15 = vertex._id;
-    vertex = g[vc3].save({first_name: "Tam"});
+    vertex = g[vc2].save({first_name: "Tam"});
     ids.vId31 = vertex._id;
-    vertex = g[vc3].save({first_name: "Tem"});
+    vertex = g[vc2].save({first_name: "Tem"});
     ids.vId32 = vertex._id;
-    vertex = g[vc3].save({first_name: "Tim", age : 24});
+    vertex = g[vc2].save({first_name: "Tim", age : 24});
     ids.vId33 = vertex._id;
-    vertex = g[vc3].save({first_name: "Tom"});
+    vertex = g[vc2].save({first_name: "Tom"});
     ids.vId34 = vertex._id;
-    vertex = g[vc3].save({first_name: "Tum"});
+    vertex = g[vc2].save({first_name: "Tum"});
     ids.vId35 = vertex._id;
 
-    var edge = g[ec1].save(ids.vId11, ids.vId12, {});
-    ids.eId11 = edge._id;
-    edge = g[ec1].save(ids.vId11, ids.vId13, {});
-    ids.eId12 = edge._id;
-    edge = g[ec1].save(ids.vId11, ids.vId14, {});
-    ids.eId13 = edge._id;
-    edge = g[ec1].save(ids.vId11, ids.vId15, {});
-    ids.eId14 = edge._id;
-    edge = g[ec1].save(ids.vId12, ids.vId11, {});
-    ids.eId15 = edge._id;
-    edge = g[ec1].save(ids.vId13, ids.vId11, {});
-    ids.eId16 = edge._id;
-    edge = g[ec1].save(ids.vId14, ids.vId11, {});
-    ids.eId17 = edge._id;
-    edge = g[ec1].save(ids.vId15, ids.vId11, {});
-    ids.eId18 = edge._id;
-    edge = g[ec2].save(ids.vId11, ids.vId31, {});
-    ids.eId21 = edge._id;
-    edge = g[ec2].save(ids.vId11, ids.vId32, {});
-    ids.eId22 = edge._id;
-    edge = g[ec2].save(ids.vId11, ids.vId33, {});
-    ids.eId23 = edge._id;
-    edge = g[ec2].save(ids.vId11, ids.vId34, {});
-    ids.eId24 = edge._id;
-    edge = g[ec2].save(ids.vId11, ids.vId35, {});
-    ids.eId25 = edge._id;
+    ids.eId11 = g[ec1].save(ids.vId11, ids.vId12, {});
+    ids.eId12 = g[ec1].save(ids.vId12, ids.vId13, {});
+    ids.eId13 = g[ec1].save(ids.vId13, ids.vId14, {});
+    ids.eId14 = g[ec1].save(ids.vId14, ids.vId15, {});
+
+    ids.eId21 = g[ec2].save(ids.vId11, ids.vId32, {});
+    ids.eId22 = g[ec2].save(ids.vId11, ids.vId31, {});
+    ids.eId23 = g[ec2].save(ids.vId14, ids.vId33, {});
+
+    ids.eId31 = g[ec3].save(ids.vId31, ids.vId33, {});
+    ids.eId32 = g[ec3].save(ids.vId31, ids.vId34, {});
+    ids.eId33 = g[ec3].save(ids.vId33, ids.vId34, {});
+
     return ids;
   };
+
+  var allIds;
 
   return {
 
@@ -2855,12 +2843,11 @@ function MeasurementsSuite() {
         unitTestGraphName,
         graph._edgeDefinitions(
           graph._relation(ec1, vc1, vc1),
-          graph._relation(ec2,
-            [vc1, vc2], [vc3, vc4]
-          )
+          graph._relation(ec2, vc1, vc2),
+          graph._relation(ec3, vc2, vc2)
         )
       );
-      fillCollections();
+      allIds = fillCollections();
     },
 
     tearDown : function() {
@@ -2873,41 +2860,43 @@ function MeasurementsSuite() {
 
     test_absoluteEccentricity : function () {
       var a = g._absoluteEccentricity({});
-      assertEqual(Object.keys(a[0]).length , 10);
+      assertEqual(Object.keys(a).length , 10);
     },
 
     test_eccentricity : function () {
       var a = g._eccentricity({});
-      assertEqual(Object.keys(a[0]).length , 10);
+      assertEqual(Object.keys(a).length , 10);
     },
     test_absoluteCloseness : function () {
       var a = g._absoluteCloseness({});
-      assertEqual(Object.keys(a[0]).length , 10);
+      assertEqual(Object.keys(a).length , 10);
     },
     test_closeness : function () {
       var a = g._closeness({});
-      assertEqual(Object.keys(a[0]).length , 10);
+      assertEqual(Object.keys(a).length , 10);
     },
     test_absoluteBetweenness : function () {
       var a = g._absoluteBetweenness({});
-      assertEqual(Object.keys(a[0]).length , 10);
+      assertEqual(Object.keys(a).length , 10);
     },
     test_betweenness : function () {
       var a = g._betweenness({});
-      assertEqual(Object.keys(a[0]).length , 10);
+      assertEqual(Object.keys(a).length , 10);
     },
     test_radius : function () {
       var a = g._radius({});
-      assertEqual(a[0] , 1);
+      assertEqual(a , 3);
     },
     test_diameter : function () {
       var a = g._diameter({});
-      assertEqual(a[0] , 2);
+      assertEqual(a , 5);
     },
+
     test_paths : function () {
       var a = g._paths({maxLength : 2});
-      assertEqual(a[0].length , 50);
+      assertEqual(a[0].length , 28);
     },
+
     test_shortestPaths : function () {
       var a = g._shortestPath([{first_name: 'Tim',
                                 age : 24},
@@ -2942,12 +2931,14 @@ function MeasurementsSuite() {
 /// @brief executes the test suites
 ////////////////////////////////////////////////////////////////////////////////
 
+/*
 jsunity.run(GeneralGraphCommonNeighborsSuite);
 jsunity.run(GeneralGraphAQLQueriesSuite);
 jsunity.run(EdgesAndVerticesSuite);
 jsunity.run(GeneralGraphCreationSuite);
 jsunity.run(ChainedFluentAQLResultsSuite);
 jsunity.run(OrphanCollectionSuite);
+*/
 jsunity.run(MeasurementsSuite);
 
 return jsunity.done();

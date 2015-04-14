@@ -121,18 +121,18 @@ def example_content(filepath, fh, tag):
     fh.write("<div id=\"%s\">\n" % longTag)
 
   fh.write("<pre>\n")
-  fh.write("```\n")
+#  fh.write("```\n")
   fh.write("%s" % long)
-  fh.write("```\n")
+#  fh.write("```\n")
   fh.write("</pre>\n")
   fh.write("</div>\n")
   
   if shortable:
     fh.write("<div id=\"%s\" onclick=\"%s\">\n" % (shortTag, shortToggle))
     fh.write("<pre>\n")
-    fh.write("```\n")
+#    fh.write("```\n")
     fh.write("%s" % short)
-    fh.write("```\n")
+#    fh.write("```\n")
 
     if arangosh:
       fh.write("</pre><div class=\"example_show_button\">show execution results</div>\n")
@@ -197,9 +197,9 @@ if __name__ == "__main__":
   commentsFile.write("@endDocuBlock \n")
   commentsFile.close()
   errorsFile.close()
-  path = ["arangod/cluster","arangod/RestHandler","arangod/V8Server","arangod/RestServer","arangod/Wal",
-      "lib/Admin","lib/HttpServer","lib/V8","lib/ApplicationServer","lib/Scheduler","lib/Rest","lib/BasicsC",
-      "js/actions","js/client","js/apps/databases","js/apps/system/cerberus","js/apps/system/gharial","js/common","js/server"]
+  path = ["arangod/Cluster","arangod/RestHandler","arangod/V8Server","arangod/RestServer","arangod/Wal",
+      "lib/Admin","lib/HttpServer","lib/V8","lib/ApplicationServer","lib/Scheduler","lib/Rest","lib/Basics",
+      "js/actions","js/client","js/apps/system/cerberus","js/common","js/server","js/apps"]
   for i in path:
     dirpath = os.path.abspath(os.path.join(os.path.dirname( __file__ ), os.pardir,"ArangoDB/../../"+i))
     fetch_comments(dirpath)

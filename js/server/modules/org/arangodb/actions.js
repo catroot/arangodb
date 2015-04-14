@@ -1,5 +1,5 @@
 /*jshint strict: false, unused: false */
-/*global require, exports, module */
+/*global JSON_CURSOR */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief JavaScript actions module
@@ -228,7 +228,7 @@ function requireModule (name, route) {
     return { module: require(name) };
   }
   catch (err) {
-    if (err.hasOwnProperty("moduleNotFound") && err.moduleNotFound) {
+    if (err instanceof internal.ArangoError && err.errorNum === internal.errors.ERROR_MODULE_NOT_FOUND.code) {
       return notImplementedFunction(
         route,
         "an error occurred while loading the action module '" + name
@@ -877,8 +877,21 @@ function buildRoutingTree (routes) {
         analyseRoutes(storage, route);
       }
       else {
-        installRoute(storage.routes, route, "", {});
-       }
+
+        // use normal root module or app context
+        var appContext;
+
+        if (route.hasOwnProperty('appContext')) {
+          appContext = routes.appContext;
+        }
+        else {
+          appContext = {
+            module: module.root
+          };
+        }
+
+        installRoute(storage.routes, route, "", appContext);
+      }
     }
     catch (err) {
       console.errorLines("cannot install route '%s': %s", route.name, String(err.stack || err));
@@ -1845,43 +1858,37 @@ function resultCursor (req, res, cursor, code, options) {
     hasNext = false;
     cursorId = null;
   }
-  else if (typeof cursor === 'object') {
-    if (cursor.getExtra !== undefined) {
-      // cursor is assumed to be an ArangoCursor
-      hasCount = cursor.hasCount();
-      count = cursor.count();
-      rows = cursor.toArray();
-
-      // must come after toArray()
-      hasNext = cursor.hasNext();
-      extra = cursor.getExtra();
-
-      if (hasNext) {
-        cursor.persist();
-        cursorId = cursor.id();
+  else if (typeof cursor === 'object' && cursor.hasOwnProperty('json')) {
+    // cursor is a regular JS object (performance optimisation)
+    hasCount = ((options && options.countRequested) ? true : false);
+    count = cursor.json.length;
+    rows = cursor.json;
+    extra = { };
+    [ "stats", "warnings", "profile" ].forEach(function(d) {
+      if (cursor.hasOwnProperty(d)) {
+        extra[d] = cursor[d];
       }
-      else {
-        cursorId = null;
-        cursor.dispose();
-      }
+    });
+    hasNext = false;
+    cursorId = null;
+  }
+  else if (typeof cursor === 'string' && cursor.match(/^\d+$/)) {
+    // cursor is assumed to be a cursor id
+    var tmp = JSON_CURSOR(cursor);
+
+    hasCount = true;
+    count = tmp.count;
+    rows = tmp.result;
+    hasNext = tmp.hasOwnProperty('id');
+    extra = undefined;
+
+    if (hasNext) {
+      cursorId = tmp.id;
     }
-    else if (cursor.hasOwnProperty('json')) {
-      // cursor is a regular JS object (performance optimisation)
-      hasCount = ((options && options.countRequested) ? true : false);
-      count = cursor.json.length;
-      rows = cursor.json;
-      extra = { };
-      [ "stats", "warnings", "profile" ].forEach(function(d) {
-        if (cursor.hasOwnProperty(d)) {
-          extra[d] = cursor[d];
-        }
-      });
-      hasNext = false;
+    else {
       cursorId = null;
     }
   }
-
-  // do not use cursor after this
 
   var result = {
     result : rows,

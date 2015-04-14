@@ -1,5 +1,4 @@
 /*jshint strict: false */
-/*global module, require, exports */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief Foxx application module
@@ -85,6 +84,7 @@
     this.collectionPrefix = app._collectionPrefix;
     this.options = app._options;
     this.configuration = app._options.configuration;
+    this.dependencies = app._dependencies;
     this.basePath = prefix;
     this.baseUrl = '/_db/' + encodeURIComponent(db._name()) + app._mount;
     this.isDevelopment = app._isDevelopment;
@@ -179,13 +179,29 @@ var computeRootAppPath = function(mount, isValidation) {
     this._isDevelopment = config.isDevelopment || false;
     this._exports = {};
     this._collectionPrefix = this._mount.substr(1).replace(/-/g, "_").replace(/\//g, "_") + "_";
+
     // Apply the default configuration and ignore all missing options
-    
     var cfg = config.options.configuration;
     this._options.configuration = applyDefaultConfig(this._manifest.configuration);
     this.configure(cfg);
+
+    var depsLookup = {};
+    var deps = config.options.dependencies;
+    this._options.dependencies = deps;
+    this._dependencies = depsLookup;
+    _.each(deps, function (mount, name) {
+      Object.defineProperty(depsLookup, name, {
+        configurable: true,
+        enumerable: true,
+        get: function () {
+          return require("org/arangodb/foxx").requireApp(mount);
+        }
+      });
+    }, this);
+
     this._context = new AppContext(this);
-    this._context.appModule = module.createAppModule(this);
+    this._context.appPackage = module.createAppPackage(this);
+    this._context.appModule = this._context.appPackage.createAppModule(this);
 
     if (! this._manifest.hasOwnProperty("defaultDocument")) {
       this._manifest.defaultDocument = "index.html";
@@ -269,15 +285,7 @@ var computeRootAppPath = function(mount, isValidation) {
   ArangoApp.prototype.development = function(activate) {
     this._isDevelopment = activate;
   };
-  
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief getAppContext
-////////////////////////////////////////////////////////////////////////////////
-
-  ArangoApp.prototype.getAppContext = function () {
-    return this._appContext;
-  };
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief set app configuration
@@ -363,14 +371,13 @@ var computeRootAppPath = function(mount, isValidation) {
     return false;
   };
 
-
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief loadAppScript
 ////////////////////////////////////////////////////////////////////////////////
 
   ArangoApp.prototype.loadAppScript = function (filename, options) {
     var appContext;
-    if (options !== undefined && options.hasOwnProperty("appContext")) {
+    if (options !== undefined && options.appContext) {
       appContext = _.extend(options.appContext, this._context);
     } else {
       appContext = _.extend({}, this._context);
@@ -382,86 +389,37 @@ var computeRootAppPath = function(mount, isValidation) {
     if (!fs.exists(full)) {
       throwFileNotFound(full);
     }
+
     var fileContent = fs.read(full);
-
-    if (options.hasOwnProperty('transform')) {
+    if (options.transform) {
       fileContent = options.transform(fileContent);
-    }
-    else if (/\.coffee$/.test(filename)) {
+    } else if (/\.coffee$/.test(filename)) {
       var cs = require("coffee-script");
-
       fileContent = cs.compile(fileContent, {bare: true});
     }
 
-    var sandbox = {};
-    var key;
-
-    if (options.hasOwnProperty('context')) {
-      var context = options.context;
-
-      for (key in context) {
-        if (context.hasOwnProperty(key) && key !== "__myenv__") {
-          sandbox[key] = context[key];
-        }
-      }
+    var context = {};
+    if (options.context) {
+      Object.keys(options.context).forEach(function (key) {
+        context[key] = options.context[key];
+      });
     }
 
-    sandbox.__filename = full;
-    sandbox.__dirname = module.normalizeModuleName(full + "/..");
-    sandbox.module = appContext.appModule;
-    sandbox.applicationContext = appContext;
-
-    sandbox.require = function (path) {
-      return appContext.appModule.require(path);
-    };
-
-    var content = "(function (__myenv__) {";
-
-    for (key in sandbox) {
-      if (sandbox.hasOwnProperty(key)) {
-        // using `key` like below is not safe (imagine a key named `foo bar`!)
-        // TODO: fix this
-        content += "var " + key + " = __myenv__[" + JSON.stringify(key) + "];";
-      }
-    }
-
-    content += "delete __myenv__;"
-             + "(function () {"
-             + fileContent
-             + "\n}());"
-             + "});";
-    // note: at least one newline character must be used here, otherwise
-    // a script ending with a single-line comment (two forward slashes)
-    // would render the function tail invalid
-    // adding a newline at the end will create stack traces with a line number
-    // one higher than the last line in the script file
-    
-    var fun;
+    var localModule = appContext.appPackage.createAppModule(this, filename);
+    context.__filename = full;
+    context.__dirname = module.normalizeModuleName(full + "/..");
+    context.console = require("org/arangodb/foxx/console")(this._mount);
+    context.applicationContext = appContext;
 
     try {
-      fun = internal.executeScript(content, undefined, full);
+      return localModule.run(fileContent, context);
     } catch(e) {
-      var err = new ArangoError({
-        errorNum: errors.ERROR_SYNTAX_ERROR_IN_SCRIPT.code,
-        errorMessage: "File: " + filename + " " + errors.ERROR_SYNTAX_ERROR_IN_SCRIPT.message + " " + String(e)
-      });
-      err.stack = e.stack;
-      throw err;
-    }
-
-    if (fun === undefined) {
-      throw new ArangoError({
-        errorNum: errors.ERROR_FAILED_TO_EXECUTE_SCRIPT.code,
-        errorMessage: errors.ERROR_FAILED_TO_EXECUTE_SCRIPT.message + " File: " + filename + " Content: " + content
-      });
-    }
-
-    try {
-      fun(sandbox);
-    } catch (e) {
+      if (e instanceof ArangoError) {
+        throw e;
+      }
       var err = new ArangoError({
         errorNum: errors.ERROR_FAILED_TO_EXECUTE_SCRIPT.code,
-        errorMessage: errors.ERROR_FAILED_TO_EXECUTE_SCRIPT.message + " File: " + filename + " Error: " + String(e)
+        errorMessage: errors.ERROR_FAILED_TO_EXECUTE_SCRIPT.message + " File: " + filename + " Content: " + fileContent
       });
       err.stack = e.stack;
       throw err;

@@ -1,5 +1,5 @@
 /*jshint strict: false */
-/*global require, exports, assertTrue, assertEqual, fail, 
+/*global assertTrue, assertEqual, fail, 
   AQL_EXECUTE, AQL_PARSE, AQL_EXPLAIN, AQL_EXECUTEJSON */
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -30,7 +30,6 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 var internal = require("internal");
-var arangodb = require("org/arangodb");
 var ShapedJson = internal.ShapedJson;
 var printYaml = function (plan) { require("internal").print(require("js-yaml").safeDump(plan));};
 
@@ -107,10 +106,6 @@ function getQueryExplanation (query, bindVars) {
 function getModifyQueryResults (query, bindVars) {
   var queryResult = AQL_EXECUTE(query, bindVars);
 
-  if (queryResult instanceof arangodb.ArangoCursor) {
-    return queryResult.getExtra();
-  }
-
   return queryResult.stats;
 }
 
@@ -120,10 +115,6 @@ function getModifyQueryResults (query, bindVars) {
 
 function getModifyQueryResultsRaw (query, bindVars) {
   var queryResult = AQL_EXECUTE(query, bindVars);
-
-  if (queryResult instanceof arangodb.ArangoCursor) {
-    return queryResult.getExtra();
-  }
 
   return queryResult;
 }

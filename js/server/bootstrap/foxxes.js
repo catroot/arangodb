@@ -1,4 +1,4 @@
-/*global require */
+'use strict';
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief initialise foxxes for a database
@@ -36,32 +36,31 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 (function () {
-  "use strict";
   var internal = require("internal");
   var db = internal.db;
-
   return {
     foxx: function () {
       require("org/arangodb/foxx/manager").initializeFoxx();
     },
-
     foxxes: function () {
+      var dbName = db._name();
+
       try {
         db._useDatabase("_system");
-
         var databases = db._listDatabases();
-        var i;
 
-        for (i = 0;  i < databases.length;  ++i) {
+        for (var i = 0;  i < databases.length;  ++i) {
           db._useDatabase(databases[i]);
-
           require("org/arangodb/foxx/manager").initializeFoxx();
         }
       }
-      catch (err) {
-        db._useDatabase("_system");
-        throw err;
+      catch (e) {
+        db._useDatabase(dbName);
+        throw e;
       }
+        
+      // return to _system database so the caller does not need to know we changed the db
+      db._useDatabase(dbName);
     }
   };
 }());

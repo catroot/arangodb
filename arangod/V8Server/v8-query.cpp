@@ -253,7 +253,7 @@ static int SetupExampleObject (v8::Handle<v8::Object> const example,
 
       values[i] = TRI_ShapedJsonV8Object(isolate, val, shaper, false);
 
-      if (values[i] == 0) {
+      if (values[i] == nullptr) {
         CleanupExampleObject(shaper->_memoryZone, i, pids, values);
         return TRI_RESULT_ELEMENT_NOT_FOUND;
       }
@@ -1898,11 +1898,19 @@ static void JS_ChecksumCollection (const v8::FunctionCallbackInfo<v8::Value>& ar
 ///
 /// @EXAMPLES
 ///
-/// @EXAMPLE_ARANGOSH_OUTPUT{edgeCollectionEdges}
-/// ~ db._create("example");
-///   db.relation.edges("vertex/1593622");
-/// ~ db._drop("example");
-/// @END_EXAMPLE_ARANGOSH_OUTPUT
+/// ```bash
+/// arango> db.relation.edges("vertex/1593622");
+/// [
+///   {
+///     "_id" : "relation/3100950",
+///     "_key" : "3100950",
+///     "_rev" : "3100950",
+///     "_from" : "vertex/1528086",
+///     "_to" : "vertex/1593622",
+///     "label" : "knows"
+///   }
+/// ]
+/// ```
 ///
 /// @endDocuBlock
 ////////////////////////////////////////////////////////////////////////////////
@@ -1924,13 +1932,21 @@ static void JS_EdgesQuery (const v8::FunctionCallbackInfo<v8::Value>& args) {
 /// *vertices*, which must a list of documents or document handles.
 ///
 /// @EXAMPLES
-///
-/// @EXAMPLE_ARANGOSH_OUTPUT{edgeCollectionInEdges}
-/// ~ db._create("example");
-///   db.relation.inEdges("vertex/1528086");
-///   db.relation.inEdges("vertex/1593622");
-/// ~ db._drop("example");
-/// @END_EXAMPLE_ARANGOSH_OUTPUT
+/// ```bash
+/// arango> db.relation.inEdges("vertex/1528086");
+/// [ ]
+/// arango> db.relation.inEdges("vertex/1593622");
+/// [
+///   {
+///      "_id" : "inEdges/3100950",
+///      "_key" : "3100950",
+///      "_rev" : "3100950", 
+///      "_from" : "vertex/1528086",
+///      "_to" : "vertex/1593622",
+///      "label" : "knows"
+///   }
+/// ]
+/// ```
 ///
 /// @endDocuBlock
 ////////////////////////////////////////////////////////////////////////////////
@@ -2361,12 +2377,19 @@ static void JS_NearQuery (const v8::FunctionCallbackInfo<v8::Value>& args) {
 ///
 /// @EXAMPLES
 ///
-/// @EXAMPLE_ARANGOSH_OUTPUT{edgeCollectionOutEdges}
-/// ~ db._create("example");
-///   db.relation.inEdges("vertex/1528086");
-///   db.relation.inEdges("vertex/1593622");
-/// ~ db._drop("example");
-/// @END_EXAMPLE_ARANGOSH_OUTPUT
+/// ```bash
+/// arango> db.relation.edges("vertex/1593622");
+/// [
+///   {
+///      "_id" : "relation/3100950",
+///      "_key" : "3100950",
+///      "_rev" : "3100950",
+///      "_from" : "vertex/1528086",
+///      "_to" : "vertex/1593622",
+///      "label" : "knows"
+///   }
+/// ]
+/// ```
 ///
 /// @endDocuBlock
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,4 +1,4 @@
-/*global require, exports, module */
+'use strict';
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief JavaScript base module
@@ -30,13 +30,10 @@
 module.isSystem = true;
 
 var common = require("org/arangodb-common");
-var key;
 
-for (key in common) {
-  if (common.hasOwnProperty(key)) {
-    exports[key] = common[key];
-  }
-}
+Object.keys(common).forEach(function (key) {
+  exports[key] = common[key];
+});
 
 var internal = require("internal"); // OK: db
 
@@ -52,12 +49,6 @@ var ShapedJson = require("org/arangodb/shaped-json").ShapedJson;
 
 // cannot yet not use arangodb
 exports.ArangoCollection = require("org/arangodb/arango-collection").ArangoCollection;
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief class "ArangoCursor"
-////////////////////////////////////////////////////////////////////////////////
-
-exports.ArangoCursor = internal.ArangoCursor;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief class "ArangoDatabase"

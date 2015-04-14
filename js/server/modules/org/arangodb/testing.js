@@ -1,5 +1,4 @@
 /*jshint strict: false, sub: true */
-/*global require, exports */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief General unittest framework
@@ -438,7 +437,7 @@ function readImportantLogLines(logPath) {
       var maxBuffer = buf.length;
       for (j = 0; j < maxBuffer; j++) {
         if (buf[j] === 10) { // \n
-          var line = buf.asciiSlice(lineStart, j - 1);
+          var line = buf.asciiSlice(lineStart, j);
           // filter out regular INFO lines, and test related messages
           if ((line.search(" INFO ") < 0) &&
             (line.search("WARNING about to execute:") < 0) &&
@@ -466,6 +465,9 @@ function copy (src, dst) {
 function checkInstanceAlive(instanceInfo, options) {
   var storeArangodPath;
   if (options.cluster === false) {
+    if (instanceInfo.hasOwnProperty('exitStatus')) {
+      return false;
+    }
     var res = statusExternal(instanceInfo.pid, false);
     var ret = res.status === "RUNNING";
     if (! ret) {
@@ -482,14 +484,18 @@ function checkInstanceAlive(instanceInfo, options) {
       {
         storeArangodPath = "/var/tmp/arangod_" + instanceInfo.pid.pid;
         print("Core dump written; copying arangod to " + 
-              storeArangodPath + " for later analysis.");
+              instanceInfo.tmpDataDir + " for later analysis.");
         res.gdbHint = "Run debugger with 'gdb " + 
           storeArangodPath + 
           " /var/tmp/core*" + instanceInfo.pid.pid + "*'";
-        copy("bin/arangod", storeArangodPath);
         if (require("internal").platform.substr(0,3) === 'win') {
+          copy("bin/arangod.exe", instanceInfo.tmpDataDir);
+          copy("bin/arangod.pdb", instanceInfo.tmpDataDir);
           // Windows: wait for procdump to do its job...
           statusExternal(instanceInfo.monitor, true);
+        }
+        else {
+          copy("bin/arangod", instanceInfo.tmpDataDir);
         }
       }
     }

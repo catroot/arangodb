@@ -1711,20 +1711,14 @@ static int ObjectToJson (v8::Isolate* isolate,
                          std::vector<v8::Handle<v8::Object>>& seenObjects) {
   v8::HandleScope scope(isolate);
 
+  if (parameter->IsNull()) {
+    TRI_InitNullJson(result);
+    return TRI_ERROR_NO_ERROR;
+  }
+
   if (parameter->IsBoolean()) {
     v8::Handle<v8::Boolean> booleanParameter = parameter->ToBoolean();
     TRI_InitBooleanJson(result, booleanParameter->Value());
-    return TRI_ERROR_NO_ERROR;
-  }
-
-  if (parameter->IsBooleanObject()) {
-    v8::Handle<v8::BooleanObject> bo = v8::Handle<v8::BooleanObject>::Cast(parameter);
-    TRI_InitBooleanJson(result, bo->BooleanValue());
-    return TRI_ERROR_NO_ERROR;
-  }
-
-  if (parameter->IsNull()) {
-    TRI_InitNullJson(result);
     return TRI_ERROR_NO_ERROR;
   }
 
@@ -1734,13 +1728,7 @@ static int ObjectToJson (v8::Isolate* isolate,
     return TRI_ERROR_NO_ERROR;
   }
   
-  if (parameter->IsNumberObject()) {
-    v8::Handle<v8::NumberObject> no = v8::Handle<v8::NumberObject>::Cast(parameter);
-    TRI_InitNumberJson(result, no->NumberValue());
-    return TRI_ERROR_NO_ERROR;
-  }
-
-  if (parameter->IsString() || parameter->IsStringObject()) {
+  if (parameter->IsString()) {
     v8::Handle<v8::String> stringParameter = parameter->ToString();
     TRI_Utf8ValueNFC str(TRI_UNKNOWN_MEM_ZONE, stringParameter);
     
@@ -1793,14 +1781,38 @@ static int ObjectToJson (v8::Isolate* isolate,
     return TRI_ERROR_NO_ERROR;
   }
   
-  if (parameter->IsRegExp() || 
-      parameter->IsFunction() || 
-      parameter->IsExternal()) {
-    TRI_InitNullJson(result); 
-    return TRI_ERROR_BAD_PARAMETER;
-  }
-
   if (parameter->IsObject()) {
+    if (parameter->IsBooleanObject()) {
+      TRI_InitBooleanJson(result, v8::Handle<v8::BooleanObject>::Cast(parameter)->BooleanValue());
+      return TRI_ERROR_NO_ERROR;
+    }
+
+    if (parameter->IsNumberObject()) {
+      TRI_InitNumberJson(result, v8::Handle<v8::NumberObject>::Cast(parameter)->NumberValue());
+      return TRI_ERROR_NO_ERROR;
+    }
+
+    if (parameter->IsStringObject()) {
+      v8::Handle<v8::String> stringParameter(parameter->ToString());
+      TRI_Utf8ValueNFC str(TRI_UNKNOWN_MEM_ZONE, stringParameter);
+      
+      if (*str == nullptr) {
+        TRI_InitNullJson(result);
+        return TRI_ERROR_OUT_OF_MEMORY;
+      }
+
+      // this passes ownership for the utf8 string to the JSON object
+      TRI_InitStringJson(result, str.steal(), str.length());
+      return TRI_ERROR_NO_ERROR;
+    }
+  
+    if (parameter->IsRegExp() || 
+        parameter->IsFunction() || 
+        parameter->IsExternal()) {
+      TRI_InitNullJson(result); 
+      return TRI_ERROR_BAD_PARAMETER;
+    }
+
     v8::Handle<v8::Object> o = parameter->ToObject();
 
     // first check if the object has a "toJSON" function
@@ -1846,13 +1858,12 @@ static int ObjectToJson (v8::Isolate* isolate,
       }
     }
     else {
-      seenHashes.insert(hash);
+      seenHashes.emplace(hash);
     }
 
-    seenObjects.push_back(o);
+    seenObjects.emplace_back(o);
 
-    v8::Handle<v8::Object> object = v8::Handle<v8::Object>::Cast(parameter);
-    v8::Handle<v8::Array> names = object->GetOwnPropertyNames();
+    v8::Handle<v8::Array> names = o->GetOwnPropertyNames();
     uint32_t const n = names->Length();
 
     // allocate the result object buffer in one go
@@ -1887,8 +1898,7 @@ static int ObjectToJson (v8::Isolate* isolate,
       // the reserve call above made sure we could not have run out of memory
       TRI_ASSERT_EXPENSIVE(next != nullptr);
 
-      res = ObjectToJson(isolate, next, object->Get(key),
-                         seenHashes, seenObjects);
+      res = ObjectToJson(isolate, next, o->Get(key), seenHashes, seenObjects);
 
       if (res != TRI_ERROR_NO_ERROR) {
         // to mimic behavior of previous ArangoDB versions, we need to silently ignore this error
@@ -1941,20 +1951,19 @@ TRI_json_t* TRI_ObjectToJson (v8::Isolate* isolate,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// @brief convert a V8 value to a TRI_json_t value, simplified variant
-/// called from within AQL. This makes a few assumptions about the data, e.g.
-/// that there will not be any toJSON functions contained in the objects, and
-/// that there are no cyclic objects
+/// @brief convert a V8 value to a TRI_json_t value
 ////////////////////////////////////////////////////////////////////////////////
 
-static int SimplifiedObjectToJson (v8::Isolate* isolate,
-                                   TRI_json_t* result,
-                                   v8::Handle<v8::Value> const parameter) {
+static int ObjectToJsonSimple (v8::Isolate* isolate,
+                              TRI_json_t* result,
+                              v8::Handle<v8::Value> const parameter) {
+  v8::HandleScope scope(isolate);
+
   if (parameter->IsNull()) {
     TRI_InitNullJson(result);
     return TRI_ERROR_NO_ERROR;
   }
-  
+
   if (parameter->IsBoolean()) {
     v8::Handle<v8::Boolean> booleanParameter = parameter->ToBoolean();
     TRI_InitBooleanJson(result, booleanParameter->Value());
@@ -1967,29 +1976,17 @@ static int SimplifiedObjectToJson (v8::Isolate* isolate,
     return TRI_ERROR_NO_ERROR;
   }
   
-  if (parameter->IsNumberObject()) {
-    v8::Handle<v8::NumberObject> no = v8::Handle<v8::NumberObject>::Cast(parameter);
-    TRI_InitNumberJson(result, no->NumberValue());
-    return TRI_ERROR_NO_ERROR;
-  }
-  
-  if (parameter->IsString() || parameter->IsStringObject()) {
+  if (parameter->IsString()) {
     v8::Handle<v8::String> stringParameter = parameter->ToString();
-    v8::String::Utf8Value str(stringParameter);
-  
+    TRI_Utf8ValueNFC str(TRI_UNKNOWN_MEM_ZONE, stringParameter);
+    
     if (*str == nullptr) {
       TRI_InitNullJson(result);
       return TRI_ERROR_OUT_OF_MEMORY;
     }
 
     // this passes ownership for the utf8 string to the JSON object
-    int res = TRI_InitStringCopyJson(TRI_UNKNOWN_MEM_ZONE, result, *str, str.length());
-
-    if (res != TRI_ERROR_NO_ERROR) {
-      TRI_InitNullJson(result);
-      return res;
-    }
-
+    TRI_InitStringJson(result, str.steal(), str.length());
     return TRI_ERROR_NO_ERROR;
   }
   
@@ -2013,11 +2010,18 @@ static int SimplifiedObjectToJson (v8::Isolate* isolate,
       // the reserve call above made sure we could not have run out of memory
       TRI_ASSERT_EXPENSIVE(next != nullptr);
 
-      res = SimplifiedObjectToJson(isolate, next, array->Get(i));
+      res = ObjectToJsonSimple(isolate, next, array->Get(i));
 
       if (res != TRI_ERROR_NO_ERROR) {
+        // to mimic behavior of previous ArangoDB versions, we need to silently ignore this error
+        // now return the element to the vector 
         TRI_ReturnVector(&result->_value._objects);
-        return res;
+
+        // a better solution would be:
+        // initialize the element at position, otherwise later cleanups may
+        // peek into uninitialized memory
+        // TRI_InitNullJson(next);
+        // return res;
       }
     }
 
@@ -2025,8 +2029,32 @@ static int SimplifiedObjectToJson (v8::Isolate* isolate,
   }
   
   if (parameter->IsObject()) {
-    v8::Handle<v8::Object> object = v8::Handle<v8::Object>::Cast(parameter);
-    v8::Handle<v8::Array> names = object->GetOwnPropertyNames();
+    if (parameter->IsBooleanObject()) {
+      TRI_InitBooleanJson(result, v8::Handle<v8::BooleanObject>::Cast(parameter)->BooleanValue());
+      return TRI_ERROR_NO_ERROR;
+    }
+
+    if (parameter->IsNumberObject()) {
+      TRI_InitNumberJson(result, v8::Handle<v8::NumberObject>::Cast(parameter)->NumberValue());
+      return TRI_ERROR_NO_ERROR;
+    }
+
+    if (parameter->IsStringObject()) {
+      v8::Handle<v8::String> stringParameter(parameter->ToString());
+      TRI_Utf8ValueNFC str(TRI_UNKNOWN_MEM_ZONE, stringParameter);
+      
+      if (*str == nullptr) {
+        TRI_InitNullJson(result);
+        return TRI_ERROR_OUT_OF_MEMORY;
+      }
+
+      // this passes ownership for the utf8 string to the JSON object
+      TRI_InitStringJson(result, str.steal(), str.length());
+      return TRI_ERROR_NO_ERROR;
+    }
+  
+    v8::Handle<v8::Object> o = parameter->ToObject();
+    v8::Handle<v8::Array> names = o->GetOwnPropertyNames();
     uint32_t const n = names->Length();
 
     // allocate the result object buffer in one go
@@ -2042,40 +2070,39 @@ static int SimplifiedObjectToJson (v8::Isolate* isolate,
     for (uint32_t i = 0; i < n; ++i) {
       // process attribute name
       v8::Handle<v8::Value> key = names->Get(i);
-
-      v8::String::Utf8Value str(key);
+      TRI_Utf8ValueNFC str(TRI_UNKNOWN_MEM_ZONE, key);
 
       if (*str == nullptr) {
         return TRI_ERROR_OUT_OF_MEMORY;
       }
 
-      TRI_json_t* keyJson = static_cast<TRI_json_t*>(TRI_NextVector(&result->_value._objects));
+      TRI_json_t* next = static_cast<TRI_json_t*>(TRI_NextVector(&result->_value._objects));
       // the reserve call above made sure we could not have run out of memory
-      TRI_ASSERT_EXPENSIVE(keyJson != nullptr);
+      TRI_ASSERT_EXPENSIVE(next != nullptr);
 
       // this passes ownership for the utf8 string to the JSON object
-      int res = TRI_InitStringCopyJson(TRI_UNKNOWN_MEM_ZONE, keyJson, *str, str.length());
-
-      if (res != TRI_ERROR_NO_ERROR) {
-        // return the attribute element 
-        TRI_ReturnVector(&result->_value._objects);
-        return res;
-      }
+      char* attributeName = str.steal();
+      TRI_InitStringJson(next, attributeName, str.length());
 
       // process attribute value
-      TRI_json_t* valueJson = static_cast<TRI_json_t*>(TRI_NextVector(&result->_value._objects));
+      next = static_cast<TRI_json_t*>(TRI_NextVector(&result->_value._objects));
       // the reserve call above made sure we could not have run out of memory
-      TRI_ASSERT_EXPENSIVE(valueJson != nullptr);
+      TRI_ASSERT_EXPENSIVE(next != nullptr);
 
-      res = SimplifiedObjectToJson(isolate, valueJson, object->Get(key));
+      res = ObjectToJsonSimple(isolate, next, o->Get(key));
 
       if (res != TRI_ERROR_NO_ERROR) {
-        // clean up the string allocated for the key and return
-        // both elements to the vector
-        TRI_DestroyJson(TRI_UNKNOWN_MEM_ZONE, keyJson);
+        // to mimic behavior of previous ArangoDB versions, we need to silently ignore this error
+        // now free the attributeName string and return the elements to the vector 
+        TRI_FreeString(TRI_UNKNOWN_MEM_ZONE, attributeName);
         TRI_ReturnVector(&result->_value._objects);
         TRI_ReturnVector(&result->_value._objects);
-        return res;
+
+        // a better solution would be:
+        // initialize the element at position, otherwise later cleanups may
+        // peek into uninitialized memory
+        // TRI_InitNullJson(next);
+        // return res;
       }
     }
 
@@ -2083,15 +2110,17 @@ static int SimplifiedObjectToJson (v8::Isolate* isolate,
   }
 
   TRI_InitNullJson(result);
-  return TRI_ERROR_NO_ERROR;
+  return TRI_ERROR_BAD_PARAMETER;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief convert a V8 value to a json_t value
+/// this function assumes that the V8 object does not contain any cycles and
+/// does not contain types such as Function, Date or RegExp
 ////////////////////////////////////////////////////////////////////////////////
 
-TRI_json_t* TRI_SimplifiedObjectToJson (v8::Isolate* isolate,
-                                        v8::Handle<v8::Value> const parameter) {
+TRI_json_t* TRI_ObjectToJsonSimple (v8::Isolate* isolate,
+                                    v8::Handle<v8::Value> const parameter) {
 
   TRI_json_t* json = TRI_CreateNullJson(TRI_UNKNOWN_MEM_ZONE);
 
@@ -2099,8 +2128,7 @@ TRI_json_t* TRI_SimplifiedObjectToJson (v8::Isolate* isolate,
     return nullptr;
   }
 
-  v8::HandleScope scope(isolate);
-  int res = SimplifiedObjectToJson(isolate, json, parameter);
+  int res = ObjectToJsonSimple(isolate, json, parameter);
 
   if (res != TRI_ERROR_NO_ERROR) {
     // some processing error occurred

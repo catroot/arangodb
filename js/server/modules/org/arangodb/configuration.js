@@ -1,5 +1,4 @@
 /*jshint strict: false */
-/*global require, exports */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief global configurations
@@ -43,10 +42,13 @@ var internal = require("internal");
 /// @brief the configuration collection
 ////////////////////////////////////////////////////////////////////////////////
 
-var configuration = db._collection("_configuration");
+function getConfigurationCollection () {
+  var configuration = db._collection("_configuration");
 
-if (configuration === null) {
-  configuration = db._create("_configuration", { isSystem: true, waitForSync: true });
+  if (configuration === null) {
+    throw new Error("_configuration collection not (yet) available");
+  }
+  return configuration;
 }
 
 // -----------------------------------------------------------------------------
@@ -71,6 +73,7 @@ exports.notifications.versions = function () {
   var n = "notifications";
   var v = "versions";
   var d;
+  var configuration = getConfigurationCollection();
 
   try {
     d = configuration.document(n);
@@ -104,6 +107,7 @@ exports.notifications.versions = function () {
 exports.notifications.setVersions = function (data) {
   var n = "notifications";
   var d;
+  var configuration = getConfigurationCollection();
 
   try {
     d = configuration.document(n);

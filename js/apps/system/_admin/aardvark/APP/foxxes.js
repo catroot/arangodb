@@ -1,4 +1,4 @@
-/*global require, applicationContext */
+/*global applicationContext */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief A Foxx.Controller to show all Foxx Applications
@@ -41,6 +41,11 @@
   var mountPoint = {
     type: joi.string().required().description(
       "The mount point of the app. Has to be url-encoded."
+    )
+  };
+  var scriptName = {
+    type: joi.string().required().description(
+      "The name of an app's script to run."
     )
   };
   var fs = require("fs");
@@ -212,13 +217,33 @@
     res.json(FoxxManager.configure(mount, {configuration: data}));
   }).queryParam("mount", mountPoint);
 
+  /** Run tests for an app
+   *
+   * Used to run the tests of an app
+   */
+  controller.post("/tests", function (req, res) {
+    var options = req.body();
+    var mount = validateMount(req);
+    res.json(FoxxManager.runTests(mount, options));
+  }).queryParam("mount", mountPoint);
+
+  /** Run a script for an app
+   *
+   * Used to trigger any script of an app
+   */
+  controller.post("/scripts/:name", function (req, res) {
+    var mount = validateMount(req);
+    var name = req.params("name");
+    res.json(FoxxManager.runScript(name, mount));
+  }).queryParam("mount", mountPoint).pathParam("name", scriptName);
+
   /** Trigger setup script for an app
    *
    * Used to trigger the setup script of an app
    */
   controller.patch("/setup", function(req, res) {
     var mount = validateMount(req);
-    res.json(FoxxManager.setup(mount));
+    res.json(FoxxManager.runScript("setup", mount));
   }).queryParam("mount", mountPoint);
 
   /** Trigger teardown script for an app
@@ -227,7 +252,7 @@
    */
   controller.patch("/teardown", function(req, res) {
     var mount = validateMount(req);
-    res.json(FoxxManager.teardown(mount));
+    res.json(FoxxManager.runScript("teardown", mount));
   }).queryParam("mount", mountPoint);
 
 

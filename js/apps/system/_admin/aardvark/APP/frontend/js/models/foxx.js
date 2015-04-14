@@ -78,12 +78,23 @@
       });
     },
 
-    setup: function(callback) {
-      sendRequest(this, callback, "PATCH", "setup");
+    runScript: function(name, callback) {
+      sendRequest(this, callback, "POST", "scripts/" + name);
     },
 
-    teardown: function(callback) {
-      sendRequest(this, callback, "PATCH", "teardown");
+    runTests: function (options, callback) {
+      $.ajax({
+        type: "POST",
+        url: "/_admin/aardvark/foxxes/tests?mount=" + this.encodedMount(),
+        data: JSON.stringify(options),
+        contentType: "application/json",
+        success: function(data) {
+          callback(null, data);
+        },
+        error: function(xhr) {
+          callback(xhr.responseJSON);
+        }
+      });
     },
 
     isSystem: function() {

@@ -1,5 +1,4 @@
 /*jshint strict: false */
-/*global require, exports */
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief Foxx routing
@@ -29,7 +28,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 (function() {
-  "use strict";
+  'use strict';
 
 // -----------------------------------------------------------------------------
 // --SECTION--                                                           Imports
@@ -635,9 +634,7 @@ function escapeHTML (string) {
     var controllers = app._manifest.controllers;
 
     try {
-      if (typeof controllers === "string") {
-        mountController(app, routes, "/", controllers);
-      } else if (controllers) {
+      if (controllers) {
         Object.keys(controllers).forEach(function (key) {
           mountController(app, routes, key, controllers[key]);
         });

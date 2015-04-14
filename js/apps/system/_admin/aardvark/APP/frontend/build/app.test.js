@@ -3891,12 +3891,38 @@ function GharialAdapter(nodes, edges, viewer, config) {
       });
     },
 
-    getNRandom = function(n, callback) {
-      sendQuery(queries.randomVertices, {
-        limit: n
-      }, function(res) {
-        callback(res);
+    getNRandom = function(n, collection) {
+      var data = {
+        query: queries.randomVertices,
+        bindVars: {
+          "@collection" : collection,
+          limit: n
+        }
+      };
+      var result;
+
+      $.ajax({
+        type: "POST",
+        url: api.cursor,
+        data: JSON.stringify(data),
+        contentType: "application/json",
+        dataType: "json",
+        processData: false,
+        async: false,
+        success: function(data) {
+          result = data.result;
+        },
+        error: function(data) {
+          try {
+            console.log(data.statusText);
+            throw "[" + data.errorNum + "] " + data.errorMessage;
+          }
+          catch (e) {
+            throw "Undefined ERROR";
+          }
+        }
       });
+      return result;
     },
 
     parseResultOfTraversal = function (result, callback) {
@@ -3971,7 +3997,7 @@ function GharialAdapter(nodes, edges, viewer, config) {
       + "})";
   queries.childrenCentrality = "RETURN LENGTH(GRAPH_EDGES(@graph, @id, {direction: any}))";
   queries.connectedEdges = "RETURN GRAPH_EDGES(@graph, @id)";
-  queries.randomVertices = "FOR x IN GRAPH_VERTICES(@graph, {}) SORT RAND() LIMIT @limit RETURN x";
+  queries.randomVertices = "FOR x IN @@collection SORT RAND() LIMIT @limit RETURN x";
 
   self.explore = absAdapter.explore;
 
@@ -3980,13 +4006,18 @@ function GharialAdapter(nodes, edges, viewer, config) {
   };
 
   self.loadRandomNode = function(callback) {
-    getNRandom(1, function(list) {
-      if (list.length === 0) {
-        callback({errorCode: 404});
+    var collections = _.shuffle(self.getNodeCollections()), i;
+    for (i = 0; i < collections.length; ++i) {
+      var list = getNRandom(1, collections[i]);
+      
+      if (list.length > 0) {
+        self.loadInitialNode(list[0]._id, callback);
         return;
       }
-      self.loadInitialNode(list[0]._id, callback);
-    });
+    }
+
+    // no vertex found
+    callback({errorCode: 404});
   };
 
   self.loadInitialNode = function(nodeId, callback) {
@@ -4195,20 +4226,27 @@ function GharialAdapter(nodes, edges, viewer, config) {
 
   self.getAttributeExamples = function(callback) {
     if (callback && callback.length >= 1) {
-      getNRandom(10, function(l) {
-        var ret = _.sortBy(
-          _.uniq(
-            _.flatten(
-              _.map(l, function(o) {
-                return _.keys(o);
-              })
-            )
-          ), function(e) {
-            return e.toLowerCase();
-          }
-        );
-        callback(ret);
-      });
+      var ret = [ ];
+      var collections = _.shuffle(self.getNodeCollections()), i;
+      for (i = 0; i < collections.length; ++i) {
+        var l = getNRandom(10, collections[i]);
+      
+        if (l.length > 0) {
+          ret = ret.concat(_.flatten(
+           _.map(l, function(o) {
+             return _.keys(o);
+           })
+          ));
+        }
+      }
+          
+      var ret = _.sortBy(
+        _.uniq(ret), function(e) {
+          return e.toLowerCase();
+        }
+      );
+
+      callback(ret);
     }
   };
 
@@ -10438,7 +10476,7 @@ window.Users = Backbone.Model.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, window, arangoCollectionModel, $, arangoHelper, data, _ */
+/*global Backbone, window, arangoCollectionModel, $, arangoHelper, data, _ */
 (function() {
   "use strict";
 
@@ -10768,7 +10806,7 @@ window.Users = Backbone.Model.extend({
 
 /*jshint browser: true */
 /*jshint strict: false, unused: false */
-/*global require, exports, Backbone, window, arangoDocument, arangoDocumentModel, $, arangoHelper */
+/*global Backbone, window, arangoDocument, arangoDocumentModel, $, arangoHelper */
 
 window.arangoDocument = Backbone.Collection.extend({
   url: '/_api/document/',
@@ -10991,7 +11029,7 @@ window.arangoDocument = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, window, Backbone, arangoDocumentModel, _, arangoHelper, $*/
+/*global window, Backbone, arangoDocumentModel, _, arangoHelper, $*/
 (function() {
   "use strict";
 
@@ -11352,7 +11390,7 @@ window.arangoDocument = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, activeUser, window, ArangoQuery, $, data, _, arangoHelper*/
+/*global Backbone, activeUser, window, ArangoQuery, $, data, _, arangoHelper*/
 (function() {
   "use strict";
 
@@ -11514,7 +11552,7 @@ window.ArangoReplication = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, window */
+/*global Backbone, window */
 window.StatisticsCollection = Backbone.Collection.extend({
   model: window.Statistics,
   url: "/_admin/statistics"
@@ -11522,7 +11560,7 @@ window.StatisticsCollection = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint strict: false, unused: false */
-/*global require, exports, Backbone, window */
+/*global Backbone, window */
 window.StatisticsDescriptionCollection = Backbone.Collection.extend({
   model: window.StatisticsDescription,
   url: "/_admin/statistics-description",
@@ -11884,7 +11922,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, EJS, $, window, arangoHelper, templateEngine */
+/*global Backbone, EJS, $, window, arangoHelper, templateEngine */
 
 (function() {
     "use strict";
@@ -12004,7 +12042,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, EJS, window, SwaggerUi, hljs, document, $, arango */
+/*global Backbone, EJS, window, SwaggerUi, hljs, document, $, arango */
 /*global templateEngine*/
 
 (function() {
@@ -12448,7 +12486,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, window, exports, Backbone, EJS, $, templateEngine, arangoHelper, Joi*/
+/*global window, exports, Backbone, EJS, $, templateEngine, arangoHelper, Joi*/
 
 (function() {
   "use strict";
@@ -13160,7 +13198,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, EJS, $, flush, window, arangoHelper, nv, d3, localStorage*/
+/*global Backbone, EJS, $, flush, window, arangoHelper, nv, d3, localStorage*/
 /*global document, console, Dygraph, _,templateEngine */
 
 (function () {
@@ -14285,7 +14323,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, EJS, $, window, arangoHelper, jsoneditor, templateEngine */
+/*global Backbone, EJS, $, window, arangoHelper, jsoneditor, templateEngine */
 /*global document, _ */
 
 (function() {
@@ -14568,7 +14606,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, arangoHelper, _, $, window, arangoHelper, templateEngine, Joi, btoa */
+/*global arangoHelper, _, $, window, arangoHelper, templateEngine, Joi, btoa */
 
 (function() {
   "use strict";
@@ -15970,7 +16008,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 }());
 
 /*jshint browser: true */
-/*global require, $, Joi, _, alert, templateEngine*/
+/*global $, Joi, _, alert, templateEngine*/
 (function() {
   "use strict";
 
@@ -16984,7 +17022,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, EJS, arangoHelper, window, setTimeout, $, templateEngine*/
+/*global Backbone, EJS, arangoHelper, window, setTimeout, $, templateEngine*/
 
 (function() {
   "use strict";
@@ -17900,7 +17938,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, EJS, $, setTimeout, localStorage, ace, Storage, window, _ */
+/*global Backbone, EJS, $, setTimeout, localStorage, ace, Storage, window, _ */
 /*global _, arangoHelper, templateEngine, jQuery, Joi*/
 
 (function () {
@@ -18109,7 +18147,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 
 /*jshint browser: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, EJS, $, setTimeout, localStorage, ace, Storage, window, _, console */
+/*global Backbone, EJS, $, setTimeout, localStorage, ace, Storage, window, _, console */
 /*global _, arangoHelper, templateEngine, jQuery, Joi, d3*/
 
 (function () {
@@ -19040,7 +19078,7 @@ window.ArangoUsers = Backbone.Collection.extend({
 
 /*jshint browser: true, evil: true */
 /*jshint unused: false */
-/*global require, exports, Backbone, EJS, $, window, ace, jqconsole, handler, help, location*/
+/*global Backbone, EJS, $, window, ace, jqconsole, handler, help, location*/
 /*global templateEngine*/
 
 (function() {
